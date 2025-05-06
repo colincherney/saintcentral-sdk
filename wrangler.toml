@@ -1,0 +1,38 @@
+name = "saint-central-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Enable Node.js compatibility using compatibility flag (required for @supabase/supabase-js)
+compatibility_flags = ["nodejs_compat"]
+
+# Define KV namespace for rate limiting and security logs
+kv_namespaces = [
+  { binding = "SAINT_CENTRAL_KV", id = "bf3f14f5f3814e128b8b9e5ed8430299" }
+]
+
+# Public environment variables
+[vars]
+RATE_LIMIT_ENABLED = "true"
+
+# Package dependencies to be installed
+[build]
+command = "npm install"
+
+# Development environment
+[env.dev]
+name = "saint-central-worker-dev"
+vars = { RATE_LIMIT_ENABLED = "false" }
+
+# Production environment
+[env.production]
+name = "saint-central-worker"
+vars = { RATE_LIMIT_ENABLED = "true" }
+
+# Optional: Add custom routes for production
+# [env.production.routes]
+# pattern = "api.saintcentral.com/*"
+# zone_name = "saintcentral.com"
+
+# Optional: Add additional dependencies
+# [build.upload.externals]
+# packages = ["@supabase/supabase-js"]

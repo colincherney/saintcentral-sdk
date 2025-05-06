@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "nanoid": "^5.1.5",
+    "supabase": "^2.22.6"
+  }
+}
