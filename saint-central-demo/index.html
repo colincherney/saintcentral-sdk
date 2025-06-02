@@ -3,1400 +3,707 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Saint Central Test Suite</title>
+    <title>Saint Central SDK Test Suite</title>
     <style>
       * {
-        margin: 0;
-        padding: 0;
         box-sizing: border-box;
       }
-
       body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        min-height: 100vh;
-        padding: 20px;
-      }
-
-      .container {
-        max-width: 1200px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 1400px;
         margin: 0 auto;
+        padding: 20px;
+        background: #f5f7fa;
+      }
+      .header {
+        text-align: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+      }
+      .container {
         background: white;
         border-radius: 12px;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-        overflow: hidden;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
       }
-
-      .header {
-        background: linear-gradient(135deg, #2c3e50 0%, #4a6741 100%);
-        color: white;
-        padding: 30px;
-        text-align: center;
-      }
-
-      .header h1 {
-        font-size: 2.5rem;
-        margin-bottom: 10px;
-      }
-
-      .header p {
-        opacity: 0.9;
-        font-size: 1.1rem;
-      }
-
-      .controls {
-        padding: 20px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
-        display: flex;
-        gap: 15px;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-
-      .btn {
-        padding: 12px 24px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        text-decoration: none;
-        display: inline-block;
-      }
-
-      .btn:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-
-      .btn-primary {
-        background: #007bff;
-        color: white;
-      }
-
-      .btn-primary:hover:not(:disabled) {
-        background: #0056b3;
-        transform: translateY(-2px);
-      }
-
-      .btn-secondary {
-        background: #6c757d;
-        color: white;
-      }
-
-      .btn-secondary:hover:not(:disabled) {
-        background: #545b62;
-      }
-
-      .btn-danger {
-        background: #dc3545;
-        color: white;
-      }
-
-      .stats {
+      .grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 15px;
-        margin-left: auto;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
       }
-
-      .stat {
-        text-align: center;
-        padding: 10px;
-        border-radius: 6px;
-        background: white;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .stat-number {
-        font-size: 1.5rem;
-        font-weight: bold;
-        color: #2c3e50;
-      }
-
-      .stat-label {
-        font-size: 0.8rem;
-        color: #6c757d;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .test-content {
-        padding: 30px;
-      }
-
-      .test-suite {
+      .section {
         margin-bottom: 30px;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
-        overflow: hidden;
       }
-
-      .test-suite-header {
-        background: #f8f9fa;
-        padding: 15px 20px;
-        border-bottom: 1px solid #e9ecef;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+      .section h3 {
+        color: #2d3748;
+        border-left: 4px solid #4299e1;
+        padding-left: 15px;
+        margin-bottom: 20px;
       }
-
-      .test-suite-header:hover {
-        background: #e9ecef;
+      .form-group {
+        margin-bottom: 15px;
       }
-
-      .test-suite-title {
+      label {
+        display: block;
+        margin-bottom: 6px;
         font-weight: 600;
-        color: #2c3e50;
+        color: #4a5568;
       }
-
-      .test-suite-status {
-        display: flex;
-        gap: 10px;
-        align-items: center;
+      input,
+      textarea,
+      select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s;
       }
-
-      .status-badge {
+      input:focus,
+      textarea:focus,
+      select:focus {
+        outline: none;
+        border-color: #4299e1;
+      }
+      textarea {
+        height: 80px;
+        resize: vertical;
+      }
+      button {
+        background: #4299e1;
+        color: white;
+        border: none;
+        padding: 12px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        margin-right: 10px;
+        margin-bottom: 10px;
+        transition: all 0.2s;
+      }
+      button:hover {
+        background: #3182ce;
+        transform: translateY(-1px);
+      }
+      button:disabled {
+        background: #a0aec0;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .btn-success {
+        background: #48bb78;
+      }
+      .btn-success:hover {
+        background: #38a169;
+      }
+      .btn-danger {
+        background: #f56565;
+      }
+      .btn-danger:hover {
+        background: #e53e3e;
+      }
+      .btn-warning {
+        background: #ed8936;
+      }
+      .btn-warning:hover {
+        background: #dd6b20;
+      }
+      .status {
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+      .status.connected {
+        background: #c6f6d5;
+        color: #22543d;
+        border: 1px solid #9ae6b4;
+      }
+      .status.disconnected {
+        background: #fed7d7;
+        color: #742a2a;
+        border: 1px solid #fc8181;
+      }
+      .output {
+        background: #1a202c;
+        color: #e2e8f0;
+        padding: 20px;
+        border-radius: 8px;
+        font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        max-height: 500px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+      }
+      .encryption-badge {
+        display: inline-block;
+        background: #fed7007a;
+        color: #744210;
         padding: 4px 8px;
         border-radius: 12px;
-        font-size: 0.8rem;
+        font-size: 11px;
         font-weight: 600;
+        margin-left: 8px;
       }
-
-      .status-passed {
-        background: #d4edda;
-        color: #155724;
+      .encryption-badge.encrypted {
+        background: #c6f6d5;
+        color: #22543d;
       }
-
-      .status-failed {
-        background: #f8d7da;
-        color: #721c24;
-      }
-
-      .status-pending {
-        background: #fff3cd;
-        color: #856404;
-      }
-
-      .test-list {
-        display: none;
-      }
-
-      .test-list.expanded {
-        display: block;
-      }
-
-      .test-case {
-        padding: 15px 20px;
-        border-bottom: 1px solid #f1f3f4;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .test-case:last-child {
-        border-bottom: none;
-      }
-
-      .test-name {
-        font-weight: 500;
-        color: #495057;
-      }
-
-      .test-status {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .test-icon {
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 12px;
-        font-weight: bold;
-      }
-
-      .test-passed {
-        background: #28a745;
-      }
-
-      .test-failed {
-        background: #dc3545;
-      }
-
-      .test-pending {
-        background: #ffc107;
-        color: #000;
-      }
-
-      .test-duration {
-        font-size: 0.8rem;
-        color: #6c757d;
-      }
-
-      .test-error {
-        margin-top: 10px;
-        padding: 10px;
-        background: #f8d7da;
-        border: 1px solid #f5c6cb;
-        border-radius: 4px;
-        color: #721c24;
-        font-family: monospace;
-        font-size: 0.9rem;
-        white-space: pre-wrap;
-        word-break: break-all;
-      }
-
-      .progress-bar {
-        width: 100%;
-        height: 6px;
-        background: #e9ecef;
-        border-radius: 3px;
-        overflow: hidden;
-        margin: 20px 0;
-      }
-
-      .progress-fill {
-        height: 100%;
-        background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
-        width: 0%;
-        transition: width 0.3s ease;
-      }
-
-      .logs {
-        background: #1a1a1a;
-        color: #00ff00;
-        padding: 20px;
-        border-radius: 8px;
-        font-family: "Courier New", monospace;
-        font-size: 0.9rem;
-        line-height: 1.4;
-        max-height: 300px;
-        overflow-y: auto;
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
         margin-top: 20px;
       }
-
-      .config-section {
-        margin-bottom: 20px;
-        padding: 20px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        border: 1px solid #e9ecef;
-      }
-
-      .config-section h3 {
-        margin-bottom: 15px;
-        color: #2c3e50;
-      }
-
-      .config-form {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 15px;
-      }
-
-      .form-group {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .form-group label {
-        margin-bottom: 5px;
-        font-weight: 500;
-        color: #495057;
-      }
-
-      .form-group input {
-        padding: 10px;
-        border: 1px solid #ced4da;
-        border-radius: 4px;
-        font-size: 0.9rem;
-      }
-
-      .form-group input:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
-      }
-
-      @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
-      }
-
-      .spinner {
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #007bff;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        animation: spin 1s linear infinite;
-        display: inline-block;
-        margin-right: 10px;
-      }
-
-      .hidden {
-        display: none !important;
-      }
-
-      .status-card {
-        padding: 15px 20px;
-        margin-bottom: 20px;
-        border-radius: 8px;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .status-card.success {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
-      }
-
-      .status-card.error {
-        background: #f8d7da;
-        color: #721c24;
-        border: 1px solid #f5c6cb;
-      }
-
-      .status-card.warning {
-        background: #fff3cd;
-        color: #856404;
-        border: 1px solid #ffeaa7;
-      }
-
-      .status-card.info {
-        background: #d6f9ff;
-        color: #0c5460;
-        border: 1px solid #abdde5;
-      }
-
-      .connection-test {
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 8px;
+      .stat-card {
+        background: #f7fafc;
         padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+      }
+      .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #2d3748;
+      }
+      .stat-label {
+        font-size: 12px;
+        color: #718096;
+        margin-top: 4px;
+      }
+      .quick-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
         margin-bottom: 20px;
       }
-
-      .connection-test h4 {
-        margin-bottom: 10px;
-        color: #2c3e50;
-      }
-
-      .test-button {
-        background: #17a2b8;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 0.9rem;
-      }
-
-      .test-button:hover {
-        background: #138496;
-      }
-
-      .test-button:disabled {
-        background: #6c757d;
-        cursor: not-allowed;
+      @media (max-width: 768px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .quick-actions {
+          flex-direction: column;
+        }
       }
     </style>
   </head>
   <body>
+    <div class="header">
+      <h1>🛡️ Saint Central SDK Test Suite</h1>
+      <p>Complete testing environment for auth & CRUD operations</p>
+    </div>
+
     <div class="container">
-      <div class="header">
-        <h1>🛡️ Saint Central Test Suite</h1>
-        <p>Comprehensive testing for Saint Central Server & SDK</p>
-      </div>
-
-      <div class="controls">
-        <button
-          class="btn btn-primary"
-          onclick="runAllTests()"
-          id="runAllBtn"
-          disabled
-        >
-          <span id="runIcon">▶️</span> Run All Tests
-        </button>
-        <button class="btn btn-secondary" onclick="runAuthTests()" disabled>
-          🔐 Auth Tests
-        </button>
-        <button class="btn btn-secondary" onclick="runDatabaseTests()" disabled>
-          💾 Database Tests
-        </button>
-        <button class="btn btn-secondary" onclick="runStorageTests()" disabled>
-          📁 Storage Tests
-        </button>
-        <button class="btn btn-secondary" onclick="runSecurityTests()" disabled>
-          🛡️ Security Tests
-        </button>
-        <button class="btn btn-secondary" onclick="runSDKTests()" disabled>
-          ⚡ SDK Tests
-        </button>
-        <button class="btn btn-danger" onclick="clearResults()">
-          🗑️ Clear
-        </button>
-
-        <div class="stats">
-          <div class="stat">
-            <div class="stat-number" id="totalTests">0</div>
-            <div class="stat-label">Total</div>
-          </div>
-          <div class="stat">
-            <div class="stat-number" id="passedTests">0</div>
-            <div class="stat-label">Passed</div>
-          </div>
-          <div class="stat">
-            <div class="stat-number" id="failedTests">0</div>
-            <div class="stat-label">Failed</div>
-          </div>
-          <div class="stat">
-            <div class="stat-number" id="duration">0ms</div>
-            <div class="stat-label">Duration</div>
-          </div>
+      <div class="section">
+        <h3>⚙️ Configuration</h3>
+        <div class="form-group">
+          <label for="apiUrl">API URL:</label>
+          <input
+            type="url"
+            id="apiUrl"
+            value="https://saint-central-api.colinmcherney.workers.dev"
+            placeholder="https://your-worker.workers.dev"
+          />
         </div>
-      </div>
-
-      <div class="test-content">
-        <div class="config-section">
-          <h3>⚙️ Test Configuration</h3>
-          <div class="config-form">
-            <div class="form-group">
-              <label for="serverUrl">Server URL</label>
-              <input
-                type="text"
-                id="serverUrl"
-                value=""
-                placeholder="saint-central-api.colinmcherney.workers.dev"
-              />
-              <small style="color: #6c757d; font-size: 0.8rem; margin-top: 4px"
-                >Enter your Cloudflare Worker URL (https:// will be added
-                automatically)</small
-              >
-            </div>
-            <div class="form-group">
-              <label for="testEmail">Test Email</label>
-              <input
-                type="email"
-                id="testEmail"
-                value="test@example.com"
-                placeholder="test@example.com"
-              />
-            </div>
-            <div class="form-group">
-              <label for="testPassword">Test Password</label>
-              <input
-                type="password"
-                id="testPassword"
-                value="TestPassword123!"
-                placeholder="Enter test password"
-              />
-            </div>
-            <div class="form-group">
-              <label for="timeout">Request Timeout (ms)</label>
-              <input
-                type="number"
-                id="timeout"
-                value="10000"
-                placeholder="10000"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="connection-test">
-          <h4>🔗 Server Connection Test</h4>
-          <button
-            class="test-button"
-            onclick="testConnection()"
-            id="testConnBtn"
-          >
-            Test Connection
+        <div class="quick-actions">
+          <button onclick="initializeSDK()">Initialize SDK</button>
+          <button onclick="testConnectivity()" class="btn-warning">
+            Test Connectivity
           </button>
-          <span id="connectionSpinner" class="hidden"
-            ><div class="spinner"></div
-          ></span>
+          <button onclick="clearLogs()" class="btn-danger">Clear Logs</button>
         </div>
-
-        <div id="sdkStatus" class="status-card hidden"></div>
-        <div id="connectionStatus" class="status-card hidden"></div>
-
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
-
-        <div id="testResults"></div>
-
-        <div class="logs" id="testLogs"></div>
+        <div id="status" class="status disconnected">Not initialized</div>
       </div>
     </div>
 
-    <!-- Load the actual Saint Central SDK -->
+    <div class="grid">
+      <div class="container">
+        <div class="section">
+          <h3>
+            🔐 Authentication Tests
+            <span class="encryption-badge encrypted">ENCRYPTED</span>
+          </h3>
+
+          <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" value="test@example.com" />
+          </div>
+          <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="SecurePassword123!" />
+          </div>
+
+          <div class="quick-actions">
+            <button onclick="testSignUp()">Sign Up</button>
+            <button onclick="testSignIn()" class="btn-success">Sign In</button>
+            <button onclick="testSignOut()" class="btn-danger">Sign Out</button>
+          </div>
+
+          <div class="quick-actions">
+            <button onclick="testGetSession()">Get Session</button>
+            <button onclick="testGetUser()">Get User</button>
+            <button onclick="testIsAuthenticated()">Check Auth</button>
+          </div>
+
+          <div class="form-group">
+            <label for="resetEmail">Password Reset Email:</label>
+            <input type="email" id="resetEmail" value="test@example.com" />
+            <button onclick="testPasswordReset()" style="margin-top: 10px">
+              Reset Password
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="container">
+        <div class="section">
+          <h3>
+            📊 Database Tests <span class="encryption-badge">UNENCRYPTED</span>
+          </h3>
+
+          <div class="form-group">
+            <label for="tableName">Table Name:</label>
+            <input type="text" id="tableName" value="test" />
+          </div>
+
+          <div class="form-group">
+            <label for="selectColumns">Select Columns:</label>
+            <input
+              type="text"
+              id="selectColumns"
+              value="*"
+              placeholder="*, name, email"
+            />
+          </div>
+
+          <div class="quick-actions">
+            <button onclick="testSelectAll()">Select All</button>
+            <button onclick="testFindOne()">Find One</button>
+            <button onclick="testCount()">Count Records</button>
+          </div>
+
+          <div class="form-group">
+            <label for="insertData">Insert Data (JSON):</label>
+            <textarea id="insertData">
+{"name": "John Doe", "email": "john@example.com", "age": 30}</textarea
+            >
+          </div>
+          <button onclick="testInsert()" class="btn-success">
+            Insert Record
+          </button>
+
+          <div class="form-group">
+            <label for="updateFilters">Update Filters (JSON):</label>
+            <textarea id="updateFilters">{"id": 1}</textarea>
+          </div>
+          <div class="form-group">
+            <label for="updateData">Update Data (JSON):</label>
+            <textarea id="updateData">{"name": "Jane Doe Updated"}</textarea>
+          </div>
+          <button onclick="testUpdate()" class="btn-warning">
+            Update Record
+          </button>
+
+          <div class="form-group">
+            <label for="deleteFilters">Delete Filters (JSON):</label>
+            <textarea id="deleteFilters">{"id": 1}</textarea>
+          </div>
+          <button onclick="testDelete()" class="btn-danger">
+            Delete Record
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="section">
+        <h3>🔍 Advanced Query Tests</h3>
+        <div class="quick-actions">
+          <button onclick="testQueryBuilder()">Query Builder</button>
+          <button onclick="testChainedQuery()">Chained Query</button>
+          <button onclick="testPagination()">Pagination</button>
+          <button onclick="testSorting()">Sorting</button>
+          <button onclick="testFiltering()">Filtering</button>
+        </div>
+
+        <div class="form-group">
+          <label for="rpcFunction">RPC Function Name:</label>
+          <input type="text" id="rpcFunction" value="hello_world" />
+        </div>
+        <div class="form-group">
+          <label for="rpcParams">RPC Parameters (JSON):</label>
+          <textarea id="rpcParams">{"name": "World"}</textarea>
+        </div>
+        <button onclick="testRPC()">Call RPC Function</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="section">
+        <h3>📊 Test Statistics</h3>
+        <div class="stats" id="stats">
+          <div class="stat-card">
+            <div class="stat-value" id="totalTests">0</div>
+            <div class="stat-label">Total Tests</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="successfulTests">0</div>
+            <div class="stat-label">Successful</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="failedTests">0</div>
+            <div class="stat-label">Failed</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="avgResponseTime">0ms</div>
+            <div class="stat-label">Avg Response</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="section">
+        <h3>📋 Test Output</h3>
+        <div id="output" class="output">Test results will appear here...</div>
+      </div>
+    </div>
+
     <script type="module">
-      // Import the actual Saint Central SDK and error classes
-      import {
-        createClient,
-        SaintCentralError,
-        AuthError,
-        ValidationError,
-        NetworkError,
-        RateLimitError,
-        PermissionError,
-        NotFoundError,
-        ConflictError,
-        ServerError,
-      } from "./src/sdk.js";
+      import { createClient } from "./src/sdk.js";
 
-      // Make everything globally available
-      window.createClient = createClient;
-      window.SaintCentralError = SaintCentralError;
-      window.AuthError = AuthError;
-      window.ValidationError = ValidationError;
-      window.NetworkError = NetworkError;
+      let client = null;
+      let stats = {
+        total: 0,
+        successful: 0,
+        failed: 0,
+        responseTimes: [],
+      };
 
-      // Test Framework
-      class TestRunner {
-        constructor() {
-          this.tests = new Map();
-          this.results = new Map();
-          this.isRunning = false;
-          this.startTime = 0;
-          this.config = {};
-          this.client = null;
-          this.sdkLoaded = false;
-          this.serverConnected = false;
+      function updateStats() {
+        document.getElementById("totalTests").textContent = stats.total;
+        document.getElementById("successfulTests").textContent =
+          stats.successful;
+        document.getElementById("failedTests").textContent = stats.failed;
+
+        const avgTime =
+          stats.responseTimes.length > 0
+            ? Math.round(
+                stats.responseTimes.reduce((a, b) => a + b, 0) /
+                  stats.responseTimes.length
+              )
+            : 0;
+        document.getElementById("avgResponseTime").textContent = avgTime + "ms";
+      }
+
+      function log(message, isError = false) {
+        const output = document.getElementById("output");
+        const timestamp = new Date().toLocaleTimeString();
+        const prefix = isError ? "❌" : "✅";
+        output.textContent = `[${timestamp}] ${prefix} ${message}\n\n${output.textContent}`;
+
+        stats.total++;
+        if (isError) {
+          stats.failed++;
+        } else {
+          stats.successful++;
         }
+        updateStats();
+      }
 
-        addTestSuite(name, tests) {
-          this.tests.set(name, tests);
-        }
-
-        async runAllTests() {
-          if (this.isRunning) return;
-
-          if (!this.serverConnected) {
-            this.showStatus(
-              "error",
-              "❌ Server connection required. Please test connection first."
-            );
-            return;
-          }
-
-          this.isRunning = true;
-          this.startTime = Date.now();
-          this.updateConfig();
-          this.clearResults();
-          this.log("🚀 Starting Saint Central Test Suite...");
-
-          try {
-            this.initializeClient();
-            this.showStatus(
-              "success",
-              "✅ SDK initialized successfully - Running tests..."
-            );
-
-            for (const [suiteName, testFunctions] of this.tests) {
-              await this.runTestSuite(suiteName, testFunctions);
-            }
-          } catch (error) {
-            this.log("❌ Fatal error: " + error.message);
-            this.showStatus("error", "❌ Test suite failed: " + error.message);
-          } finally {
-            this.isRunning = false;
-            this.updateStats();
-            this.log(
-              "✅ Test suite completed in " +
-                (Date.now() - this.startTime) +
-                "ms"
-            );
-            this.enableTestButtons();
-          }
-        }
-
-        async runTestSuite(suiteName, testFunctions) {
-          this.log("📂 Running " + suiteName + "...");
-          const suiteResults = [];
-
-          for (const testFunction of testFunctions) {
-            const result = await this.runSingleTest(testFunction);
-            suiteResults.push(result);
-          }
-
-          this.results.set(suiteName, suiteResults);
-          this.updateDisplay();
-          this.updateProgress();
-        }
-
-        async runSingleTest(testFunction) {
-          const startTime = Date.now();
-          const testName = testFunction.name;
-
-          try {
-            this.log("  ⏳ " + testName + "...");
-            await testFunction.call(this);
-            const duration = Date.now() - startTime;
-            this.log("  ✅ " + testName + " (" + duration + "ms)");
-            return { name: testName, status: "passed", duration, error: null };
-          } catch (error) {
-            const duration = Date.now() - startTime;
-            const errorMsg = error.message || error.toString();
-            const errorType = error.constructor.name || "Error";
-            this.log(
-              "  ❌ " +
-                testName +
-                " (" +
-                duration +
-                "ms): [" +
-                errorType +
-                "] " +
-                errorMsg
-            );
-            return {
-              name: testName,
-              status: "failed",
-              duration,
-              error: errorType + ": " + errorMsg,
-            };
-          }
-        }
-
-        updateConfig() {
-          let serverUrl = document.getElementById("serverUrl").value.trim();
-
-          // Auto-fix URL if missing protocol
-          if (
-            serverUrl &&
-            !serverUrl.startsWith("http://") &&
-            !serverUrl.startsWith("https://")
-          ) {
-            serverUrl = "https://" + serverUrl;
-          }
-
-          this.config = {
-            serverUrl: serverUrl,
-            testEmail: document.getElementById("testEmail").value,
-            testPassword: document.getElementById("testPassword").value,
-            timeout: parseInt(document.getElementById("timeout").value),
-          };
-        }
-
-        initializeClient() {
-          try {
-            if (!window.createClient) {
-              throw new Error(
-                "Saint Central SDK not loaded. Check ./src/sdk.js file exists and exports createClient."
-              );
-            }
-
-            this.client = window.createClient(this.config.serverUrl, {
-              config: {
-                requestTimeout: this.config.timeout,
-                maxRetries: 2,
-                retryDelay: 1000,
-              },
-              security: {
-                encryption: true,
-                rateLimit: true,
-              },
-            });
-
-            // Verify SDK structure
-            if (
-              !this.client.auth ||
-              !this.client.from ||
-              !this.client.storage
-            ) {
-              throw new Error(
-                "SDK client missing required modules (auth, from, storage)"
-              );
-            }
-
-            this.sdkLoaded = true;
-            this.log(
-              "✅ Saint Central SDK client initialized with proper structure"
-            );
-            this.log(
-              "📋 Available modules: auth, storage, functions, utils, security"
-            );
-          } catch (error) {
-            this.log("❌ SDK initialization error: " + error.message);
-            throw new Error("Failed to initialize SDK: " + error.message);
-          }
-        }
-
-        async testServerConnection() {
-          this.updateConfig();
-          let serverUrl = this.config.serverUrl.trim();
-
-          if (
-            !serverUrl ||
-            serverUrl === "https://your-worker.your-subdomain.workers.dev" ||
-            serverUrl === ""
-          ) {
-            this.showConnectionStatus(
-              "error",
-              "❌ Please enter a valid server URL"
-            );
-            return false;
-          }
-
-          // Auto-fix URL if missing protocol
-          if (
-            !serverUrl.startsWith("http://") &&
-            !serverUrl.startsWith("https://")
-          ) {
-            serverUrl = "https://" + serverUrl;
-            this.log("🔧 Auto-corrected URL to: " + serverUrl);
-            // Update the input field
-            document.getElementById("serverUrl").value = serverUrl;
-          }
-
-          // Validate URL format
-          try {
-            new URL(serverUrl);
-          } catch (error) {
-            this.showConnectionStatus(
-              "error",
-              "❌ Invalid URL format: " + serverUrl
-            );
-            return false;
-          }
-
-          this.showConnectionStatus(
-            "info",
-            "🔄 Testing connection to " + serverUrl + "..."
-          );
-          document
-            .getElementById("connectionSpinner")
-            .classList.remove("hidden");
-          document.getElementById("testConnBtn").disabled = true;
-
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            const response = await fetch(serverUrl, {
-              method: "GET",
-              signal: controller.signal,
-              mode: "cors",
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              throw new Error(
-                "Server responded with status: " + response.status
-              );
-            }
-
-            const data = await response.json();
-
-            if (data.name && data.status === "operational") {
-              this.serverConnected = true;
-              this.showConnectionStatus(
-                "success",
-                "✅ Connected to " +
-                  data.name +
-                  " (v" +
-                  (data.version || "unknown") +
-                  ")"
-              );
-              this.enableTestButtons();
-              this.log("✅ Server connection successful - " + data.name);
-              this.log("📡 Server URL: " + serverUrl);
-              return true;
-            } else {
-              throw new Error(
-                "Invalid response from server - missing name or operational status"
-              );
-            }
-          } catch (error) {
-            this.serverConnected = false;
-            let errorMessage = "❌ Connection failed: ";
-
-            if (error.name === "AbortError") {
-              errorMessage +=
-                "Request timeout (10s) - server may be slow or unreachable";
-            } else if (
-              error.message.includes("CORS") ||
-              error.message.includes("cors")
-            ) {
-              errorMessage +=
-                "CORS error - server may not allow requests from this domain";
-            } else if (
-              error.message.includes("Failed to fetch") ||
-              error.message.includes("Network request failed")
-            ) {
-              errorMessage +=
-                "Network error - check server URL and internet connection";
-            } else if (error.message.includes("DNS")) {
-              errorMessage += "DNS error - domain name not found";
-            } else if (
-              error.message.includes("SSL") ||
-              error.message.includes("certificate")
-            ) {
-              errorMessage +=
-                "SSL/Certificate error - try http:// instead of https://";
-            } else {
-              errorMessage += error.message;
-            }
-
-            this.showConnectionStatus("error", errorMessage);
-            this.disableTestButtons();
-            this.log("❌ Server connection failed");
-            this.log("🔍 URL attempted: " + serverUrl);
-            this.log("📋 Error details: " + error.message);
-            return false;
-          } finally {
-            document
-              .getElementById("connectionSpinner")
-              .classList.add("hidden");
-            document.getElementById("testConnBtn").disabled = false;
-          }
-        }
-
-        showStatus(type, message) {
-          const statusEl = document.getElementById("sdkStatus");
-          statusEl.className = "status-card " + type;
-          statusEl.textContent = message;
-          statusEl.classList.remove("hidden");
-        }
-
-        showConnectionStatus(type, message) {
-          const statusEl = document.getElementById("connectionStatus");
-          statusEl.className = "status-card " + type;
-          statusEl.textContent = message;
-          statusEl.classList.remove("hidden");
-        }
-
-        enableTestButtons() {
-          const buttons = document.querySelectorAll(
-            ".btn-primary, .btn-secondary"
-          );
-          buttons.forEach((btn) => {
-            if (!btn.onclick || btn.onclick.toString().includes("clearResults"))
-              return;
-            btn.disabled = false;
-          });
-        }
-
-        disableTestButtons() {
-          const buttons = document.querySelectorAll(
-            ".btn-primary, .btn-secondary"
-          );
-          buttons.forEach((btn) => {
-            if (!btn.onclick || btn.onclick.toString().includes("clearResults"))
-              return;
-            btn.disabled = true;
-          });
-        }
-
-        assert(condition, message) {
-          if (!condition) {
-            throw new Error(message);
-          }
-        }
-
-        assertEqual(actual, expected, message) {
-          if (actual !== expected) {
-            throw new Error(
-              message || "Expected " + expected + ", got " + actual
-            );
-          }
-        }
-
-        assertNotNull(value, message) {
-          if (value == null) {
-            throw new Error(message || "Expected non-null value");
-          }
-        }
-
-        log(message) {
-          const logs = document.getElementById("testLogs");
-          const timestamp = new Date().toISOString().split("T")[1].slice(0, 8);
-          logs.innerHTML += "[" + timestamp + "] " + message + "\n";
-          logs.scrollTop = logs.scrollHeight;
-        }
-
-        clearResults() {
-          this.results.clear();
-          document.getElementById("testResults").innerHTML = "";
-          document.getElementById("testLogs").innerHTML = "";
-          document.getElementById("sdkStatus").classList.add("hidden");
-          this.updateStats();
-        }
-
-        updateDisplay() {
-          const container = document.getElementById("testResults");
-          container.innerHTML = "";
-
-          for (const [suiteName, results] of this.results) {
-            const suiteDiv = this.createTestSuiteDisplay(suiteName, results);
-            container.appendChild(suiteDiv);
-          }
-        }
-
-        createTestSuiteDisplay(suiteName, results) {
-          const passed = results.filter((r) => r.status === "passed").length;
-          const failed = results.filter((r) => r.status === "failed").length;
-          const total = results.length;
-
-          const suiteDiv = document.createElement("div");
-          suiteDiv.className = "test-suite";
-
-          suiteDiv.innerHTML =
-            '<div class="test-suite-header" onclick="toggleSuite(\'' +
-            suiteName +
-            "')\">" +
-            '<div class="test-suite-title">' +
-            suiteName +
-            "</div>" +
-            '<div class="test-suite-status">' +
-            '<span class="status-badge status-passed">' +
-            passed +
-            " passed</span>" +
-            (failed > 0
-              ? '<span class="status-badge status-failed">' +
-                failed +
-                " failed</span>"
-              : "") +
-            '<span class="status-badge status-pending">' +
-            total +
-            " total</span>" +
-            "</div>" +
-            "</div>" +
-            '<div class="test-list" id="suite-' +
-            suiteName.replace(/[^a-zA-Z0-9]/g, "_") +
-            '">' +
-            results
-              .map((result) => this.createTestCaseDisplay(result))
-              .join("") +
-            "</div>";
-
-          return suiteDiv;
-        }
-
-        createTestCaseDisplay(result) {
-          const iconClass =
-            result.status === "passed" ? "test-passed" : "test-failed";
-          const icon = result.status === "passed" ? "✓" : "✗";
-
-          return (
-            '<div class="test-case">' +
-            '<div class="test-name">' +
-            result.name +
-            "</div>" +
-            '<div class="test-status">' +
-            '<div class="test-icon ' +
-            iconClass +
-            '">' +
-            icon +
-            "</div>" +
-            '<div class="test-duration">' +
-            result.duration +
-            "ms</div>" +
-            "</div>" +
-            (result.error
-              ? '<div class="test-error">Error: ' + result.error + "</div>"
-              : "") +
-            "</div>"
-          );
-        }
-
-        updateProgress() {
-          const totalSuites = this.tests.size;
-          const completedSuites = this.results.size;
-          const progress =
-            totalSuites > 0 ? (completedSuites / totalSuites) * 100 : 0;
-
-          document.getElementById("progressFill").style.width = progress + "%";
-        }
-
-        updateStats() {
-          let totalTests = 0;
-          let passedTests = 0;
-          let failedTests = 0;
-
-          for (const results of this.results.values()) {
-            totalTests += results.length;
-            passedTests += results.filter((r) => r.status === "passed").length;
-            failedTests += results.filter((r) => r.status === "failed").length;
-          }
-
-          document.getElementById("totalTests").textContent = totalTests;
-          document.getElementById("passedTests").textContent = passedTests;
-          document.getElementById("failedTests").textContent = failedTests;
-          document.getElementById("duration").textContent = this.isRunning
-            ? Date.now() - this.startTime + "ms"
-            : Date.now() - this.startTime + "ms";
+      async function runTest(testName, testFn) {
+        const startTime = Date.now();
+        try {
+          await testFn();
+          const duration = Date.now() - startTime;
+          stats.responseTimes.push(duration);
+          log(`${testName}: Success (${duration}ms)`);
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          stats.responseTimes.push(duration);
+          log(`${testName}: ${error.message} (${duration}ms)`, true);
         }
       }
 
-      // Initialize test runner
-      const testRunner = new TestRunner();
+      window.initializeSDK = async function () {
+        const url = document.getElementById("apiUrl").value;
+        if (!url) return alert("Enter API URL");
 
-      // Authentication Tests
-      const authTests = [
-        async function testServerHealthCheck() {
-          const response = await fetch(testRunner.config.serverUrl);
-          testRunner.assert(response.ok, "Server should be accessible");
-          const data = await response.json();
-          testRunner.assertNotNull(data.name, "Should return API name");
-          testRunner.assertEqual(
-            data.status,
-            "operational",
-            "Should be operational"
-          );
-        },
-
-        async function testSDKInitialization() {
-          testRunner.assertNotNull(
-            testRunner.client,
-            "SDK client should be initialized"
-          );
-          testRunner.assertNotNull(
-            testRunner.client.auth,
-            "Auth module should be available"
-          );
-          testRunner.assertNotNull(
-            testRunner.client.from,
-            "Database module should be available"
-          );
-          testRunner.assertNotNull(
-            testRunner.client.storage,
-            "Storage module should be available"
-          );
-        },
-
-        async function testSignUpWithValidCredentials() {
-          const response = await testRunner.client.auth.signUp({
-            email: testRunner.config.testEmail,
-            password: testRunner.config.testPassword,
-          });
-          testRunner.assertNotNull(response, "Should return response");
-        },
-
-        async function testSignUpWithInvalidEmail() {
-          try {
-            await testRunner.client.auth.signUp({
-              email: "invalid-email",
-              password: testRunner.config.testPassword,
-            });
-            testRunner.assert(false, "Should reject invalid email");
-          } catch (error) {
-            testRunner.assert(
-              error.message.includes("email") ||
-                error.message.includes("valid"),
-              "Should validate email format"
-            );
-          }
-        },
-
-        async function testSignInWithValidCredentials() {
-          const response = await testRunner.client.auth.signIn({
-            email: testRunner.config.testEmail,
-            password: testRunner.config.testPassword,
-          });
-          testRunner.assertNotNull(response, "Should return session data");
-        },
-
-        async function testGetSession() {
-          const response = await testRunner.client.auth.getSession();
-          testRunner.assertNotNull(response, "Should return session info");
-        },
-
-        async function testSignOut() {
-          const response = await testRunner.client.auth.signOut();
-          testRunner.assertNotNull(response, "Should sign out successfully");
-        },
-      ];
-
-      // Database Tests
-      const databaseTests = [
-        async function testSelectFromUsersTable() {
-          const response = await testRunner.client
-            .from("users")
-            .select("*")
-            .get();
-          testRunner.assertNotNull(response, "Should return query result");
-        },
-
-        async function testInsertData() {
-          const testData = {
-            name: "Test User",
-            email: "test-" + Date.now() + "@example.com",
-            created_at: new Date().toISOString(),
-          };
-
-          const response = await testRunner.client
-            .from("users")
-            .insert(testData);
-          testRunner.assertNotNull(response, "Should insert data successfully");
-        },
-
-        async function testUpdateRequiresWhereClause() {
-          try {
-            await testRunner.client.from("users").update({ name: "Updated" });
-            testRunner.assert(false, "Should require WHERE clause for update");
-          } catch (error) {
-            testRunner.assert(
-              error.message.includes("WHERE"),
-              "Should require WHERE clause"
-            );
-          }
-        },
-      ];
-
-      // Storage Tests
-      const storageTests = [
-        async function testFileUpload() {
-          const testFile = new Blob(["test content for upload"], {
-            type: "text/plain",
-          });
-          const fileName = "test-file-" + Date.now() + ".txt";
-
-          const response = await testRunner.client.storage
-            .from("test-bucket")
-            .upload(fileName, testFile);
-          testRunner.assertNotNull(response, "Should handle file upload");
-        },
-
-        async function testMalwareDetection() {
-          const scriptContent = "eval(dangerous_code);";
-          const maliciousFile = new Blob([scriptContent], {
-            type: "text/javascript",
-          });
-
-          try {
-            await testRunner.client.storage
-              .from("test-bucket")
-              .upload("malicious.js", maliciousFile);
-            testRunner.assert(true, "Server should scan uploaded files");
-          } catch (error) {
-            testRunner.assert(
-              error.message.includes("security") ||
-                error.message.includes("threat"),
-              "Should detect malicious content"
-            );
-          }
-        },
-      ];
-
-      // Security Tests
-      const securityTests = [
-        async function testSecurityHeaders() {
-          const response = await fetch(testRunner.config.serverUrl);
-          const headers = response.headers;
-
-          testRunner.assert(
-            headers.has("X-Content-Type-Options"),
-            "Should include X-Content-Type-Options header"
-          );
-          testRunner.assert(
-            headers.has("X-Frame-Options"),
-            "Should include X-Frame-Options header"
-          );
-        },
-
-        async function testEncryptionCapability() {
-          const testData = { message: "test encryption" };
-          const encrypted = await testRunner.client.utils.encrypt(testData);
-
-          testRunner.assertNotNull(encrypted.data, "Should encrypt data");
-          testRunner.assertEqual(
-            encrypted.encrypted,
-            true,
-            "Should mark as encrypted"
-          );
-
-          const decrypted = await testRunner.client.utils.decrypt(encrypted);
-          testRunner.assertEqual(
-            decrypted.message,
-            "test encryption",
-            "Should decrypt correctly"
-          );
-        },
-      ];
-
-      // SDK Tests
-      const sdkTests = [
-        async function testSDKErrorHandling() {
-          try {
-            await testRunner.client.auth.signIn({
-              email: "nonexistent@example.com",
-              password: "wrongpassword",
-            });
-            testRunner.assert(false, "Should throw error for invalid login");
-          } catch (error) {
-            testRunner.assert(
-              error instanceof Error,
-              "Should throw proper Error objects"
-            );
-            testRunner.assertNotNull(
-              error.message,
-              "Error should have message"
-            );
-          }
-        },
-
-        async function testSDKSecurityFeatures() {
-          testRunner.assertNotNull(
-            testRunner.client.utils.encrypt,
-            "Should have encryption utils"
-          );
-          testRunner.assertNotNull(
-            testRunner.client.utils.decrypt,
-            "Should have decryption utils"
-          );
-        },
-      ];
-
-      // Functions Tests
-      const functionTests = [
-        async function testEdgeFunctionInvocation() {
-          try {
-            const response = await testRunner.client.functions.invoke(
-              "test-function",
-              {
-                message: "Hello from test",
-              }
-            );
-            testRunner.assertNotNull(
-              response,
-              "Should handle function invocation"
-            );
-          } catch (error) {
-            testRunner.assert(
-              error.message.includes("function") ||
-                error.message.includes("not found"),
-              "Should handle function calls appropriately"
-            );
-          }
-        },
-      ];
-
-      // Add test suites
-      testRunner.addTestSuite("🔐 Authentication Tests", authTests);
-      testRunner.addTestSuite("💾 Database Tests", databaseTests);
-      testRunner.addTestSuite("📁 Storage Tests", storageTests);
-      testRunner.addTestSuite("🛡️ Security Tests", securityTests);
-      testRunner.addTestSuite("⚡ SDK Tests", sdkTests);
-      testRunner.addTestSuite("🚀 Functions Tests", functionTests);
-
-      // Global functions for UI
-      window.testRunner = testRunner;
-
-      window.testConnection = () => {
-        testRunner.testServerConnection();
+        try {
+          client = createClient(url);
+          document.getElementById("status").className = "status connected";
+          document.getElementById("status").textContent =
+            "✅ SDK Initialized - Ready for testing";
+          log("SDK initialized successfully");
+        } catch (error) {
+          log(`SDK initialization failed: ${error.message}`, true);
+        }
       };
 
-      window.runAllTests = () => {
-        const runIcon = document.getElementById("runIcon");
-        if (testRunner.isRunning) return;
-
-        runIcon.innerHTML = '<div class="spinner"></div>';
-        testRunner.runAllTests().finally(() => {
-          runIcon.innerHTML = "▶️";
+      window.testConnectivity = async function () {
+        const url = document.getElementById("apiUrl").value;
+        await runTest("Connectivity", async () => {
+          const response = await fetch(url);
+          const data = await response.json();
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          log(`Connectivity: ${data.name} v${data.version} (${data.status})`);
         });
       };
 
-      window.runAuthTests = () =>
-        testRunner.runTestSuite("🔐 Authentication Tests", authTests);
-      window.runDatabaseTests = () =>
-        testRunner.runTestSuite("💾 Database Tests", databaseTests);
-      window.runStorageTests = () =>
-        testRunner.runTestSuite("📁 Storage Tests", storageTests);
-      window.runSecurityTests = () =>
-        testRunner.runTestSuite("🛡️ Security Tests", securityTests);
-      window.runSDKTests = () =>
-        testRunner.runTestSuite("⚡ SDK Tests", sdkTests);
-      window.clearResults = () => testRunner.clearResults();
-
-      window.toggleSuite = (suiteName) => {
-        const suiteElement = document.getElementById(
-          "suite-" + suiteName.replace(/[^a-zA-Z0-9]/g, "_")
-        );
-        if (suiteElement) {
-          suiteElement.classList.toggle("expanded");
-        }
+      window.clearLogs = function () {
+        document.getElementById("output").textContent = "Logs cleared...";
+        stats = { total: 0, successful: 0, failed: 0, responseTimes: [] };
+        updateStats();
       };
 
-      // Auto-update stats during testing
-      setInterval(() => {
-        if (testRunner.isRunning) {
-          testRunner.updateStats();
-        }
-      }, 100);
+      // Auth Tests
+      window.testSignUp = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
 
-      // Auto-test connection when URL changes
-      document.getElementById("serverUrl").addEventListener("blur", () => {
-        let url = document.getElementById("serverUrl").value.trim();
-        if (
-          url &&
-          url !== "https://your-worker.your-subdomain.workers.dev" &&
-          url !== ""
-        ) {
-          // Auto-fix URL if missing protocol
-          if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            url = "https://" + url;
-            document.getElementById("serverUrl").value = url;
-          }
-          setTimeout(() => testRunner.testServerConnection(), 500);
-        }
-      });
+        await runTest("Sign Up", async () => {
+          const result = await client.auth.signUp(email, password);
+          if (result.error) throw new Error(result.error.message);
+          log(`Sign Up: User created for ${email}`);
+        });
+      };
 
-      // Initialize UI
-      document.addEventListener("DOMContentLoaded", () => {
-        testRunner.log("🛡️ Saint Central Test Suite initialized");
-        testRunner.log("📁 Loading SDK from ./src/sdk.js...");
+      window.testSignIn = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
 
-        // Check if SDK loaded properly
-        setTimeout(() => {
-          if (window.createClient && window.SaintCentralError) {
-            testRunner.log("✅ SDK loaded successfully from ./src/sdk.js");
-            testRunner.log(
-              "✅ Error classes imported: SaintCentralError, AuthError, ValidationError, etc."
-            );
-            testRunner.showStatus(
-              "success",
-              "✅ Saint Central SDK loaded from ./src/sdk.js with error classes"
-            );
-          } else if (window.createClient) {
-            testRunner.log(
-              "⚠️ SDK loaded but error classes missing from ./src/sdk.js"
-            );
-            testRunner.showStatus(
-              "warning",
-              "⚠️ SDK loaded but error classes may not be available"
-            );
+        await runTest("Sign In", async () => {
+          const result = await client.auth.signIn(email, password);
+          if (result.error) throw new Error(result.error.message);
+          log(`Sign In: Authenticated as ${email}`);
+        });
+      };
+
+      window.testSignOut = async function () {
+        if (!client) return alert("Initialize SDK first");
+
+        await runTest("Sign Out", async () => {
+          const result = await client.auth.signOut();
+          if (result.error) throw new Error(result.error.message);
+          log("Sign Out: Session ended");
+        });
+      };
+
+      window.testGetSession = async function () {
+        if (!client) return alert("Initialize SDK first");
+
+        await runTest("Get Session", async () => {
+          const result = await client.auth.getSession();
+          const session = result.data.session;
+          if (session && session.access_token) {
+            log(`Get Session: Active session found`);
           } else {
-            testRunner.log("❌ Failed to load SDK from ./src/sdk.js");
-            testRunner.showStatus(
-              "error",
-              "❌ Failed to load SDK. Check that ./src/sdk.js exists and exports createClient"
-            );
+            log("Get Session: No active session");
           }
-        }, 1000);
+        });
+      };
 
-        testRunner.log(
-          "📝 Configure your server URL and test connection before running tests"
+      window.testGetUser = async function () {
+        if (!client) return alert("Initialize SDK first");
+
+        await runTest("Get User", async () => {
+          const user = await client.getUser();
+          if (user) {
+            log(`Get User: ${user.email || "User found"}`);
+          } else {
+            log("Get User: No user found");
+          }
+        });
+      };
+
+      window.testIsAuthenticated = async function () {
+        if (!client) return alert("Initialize SDK first");
+
+        await runTest("Check Auth", async () => {
+          const isAuth = await client.isAuthenticated();
+          log(
+            `Authentication Status: ${
+              isAuth ? "Authenticated" : "Not authenticated"
+            }`
+          );
+        });
+      };
+
+      window.testPasswordReset = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const email = document.getElementById("resetEmail").value;
+
+        await runTest("Password Reset", async () => {
+          const result = await client.auth.resetPassword(email);
+          if (result.error) throw new Error(result.error.message);
+          log(`Password Reset: Email sent to ${email}`);
+        });
+      };
+
+      // CRUD Tests
+      window.testSelectAll = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+        const columns = document.getElementById("selectColumns").value;
+
+        await runTest("Select All", async () => {
+          const result = await client.from(table).select(columns);
+          log(`Select All: Found ${result.length} records in ${table}`);
+        });
+      };
+
+      window.testFindOne = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Find One", async () => {
+          const result = await client.from(table).findOne();
+          if (result) {
+            log(`Find One: Record found in ${table}`);
+          } else {
+            log(`Find One: No records in ${table}`);
+          }
+        });
+      };
+
+      window.testCount = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Count Records", async () => {
+          const result = await client.from(table).select();
+          log(`Count: ${result.length} records in ${table}`);
+        });
+      };
+
+      window.testInsert = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+        const data = JSON.parse(document.getElementById("insertData").value);
+
+        await runTest("Insert", async () => {
+          const result = await client.from(table).insert(data);
+          log(`Insert: Record added to ${table}`);
+        });
+      };
+
+      window.testUpdate = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+        const filters = JSON.parse(
+          document.getElementById("updateFilters").value
         );
-      });
+        const data = JSON.parse(document.getElementById("updateData").value);
+
+        await runTest("Update", async () => {
+          const result = await client.from(table).update(filters, data);
+          log(`Update: Record updated in ${table}`);
+        });
+      };
+
+      window.testDelete = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+        const filters = JSON.parse(
+          document.getElementById("deleteFilters").value
+        );
+
+        await runTest("Delete", async () => {
+          const result = await client.from(table).delete(filters);
+          log(`Delete: Record removed from ${table}`);
+        });
+      };
+
+      // Advanced Query Tests
+      window.testQueryBuilder = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Query Builder", async () => {
+          const result = await client
+            .from(table)
+            .find({ name: "John" }, { order: "id.asc", limit: 5 });
+          log(`Query Builder: Found ${result.length} records with name='John'`);
+        });
+      };
+
+      window.testChainedQuery = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Chained Query", async () => {
+          const result = await client
+            .from(table)
+            .gt("age", 18)
+            .lt("age", 65)
+            .order("name", "asc")
+            .limit(10)
+            .get();
+          log(`Chained Query: Found ${result.length} adults`);
+        });
+      };
+
+      window.testPagination = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Pagination", async () => {
+          const page1 = await client
+            .from(table)
+            .find({}, { limit: 5, offset: 0 });
+          const page2 = await client
+            .from(table)
+            .find({}, { limit: 5, offset: 5 });
+          log(
+            `Pagination: Page 1: ${page1.length} records, Page 2: ${page2.length} records`
+          );
+        });
+      };
+
+      window.testSorting = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Sorting", async () => {
+          const result = await client
+            .from(table)
+            .find({}, { order: "name.desc" });
+          log(`Sorting: ${result.length} records sorted by name (descending)`);
+        });
+      };
+
+      window.testFiltering = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const table = document.getElementById("tableName").value;
+
+        await runTest("Filtering", async () => {
+          const result = await client.from(table).find({ name: "like.%John%" });
+          log(`Filtering: Found ${result.length} records containing 'John'`);
+        });
+      };
+
+      window.testRPC = async function () {
+        if (!client) return alert("Initialize SDK first");
+        const functionName = document.getElementById("rpcFunction").value;
+        const params = JSON.parse(document.getElementById("rpcParams").value);
+
+        await runTest("RPC Function", async () => {
+          const result = await client.rpc(functionName, params);
+          log(`RPC: Function ${functionName} executed successfully`);
+        });
+      };
+
+      // Initialize stats display
+      updateStats();
     </script>
   </body>
 </html>

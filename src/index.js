@@ -1,14 +1,13 @@
 /**
- * Saint Central Cloudflare Worker - Production Ready
+ * Saint Central Cloudflare Worker - Production Ready (Updated June 2025)
  *
- * Enterprise-grade secure middleware with direct PostgreSQL connections,
+ * Enterprise-grade secure middleware with Supabase REST API,
  * comprehensive security, monitoring, and error handling.
+ * Updated to use Supabase REST instead of Neon for reliability
  *
- * @version 2.0.0
+ * @version 2.2.0
  * @author Saint Central Security Team
  */
-
-import { neon } from "@neondatabase/serverless";
 
 // Production configuration with validation
 class Config {
@@ -119,12 +118,17 @@ class Config {
   }
 }
 
-// Production-grade PostgreSQL client
-class PostgresClient {
+// Production-grade Supabase REST client (replacing Neon)
+class SupabaseClient {
   constructor(config) {
     this.config = config;
-    this.sql = neon(config.database.url);
-    this.connectionPool = new Map();
+    this.baseUrl = `${config.supabase.url}/rest/v1`;
+    this.headers = {
+      apikey: config.supabase.serviceKey,
+      Authorization: `Bearer ${config.supabase.serviceKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    };
     this.queryStats = {
       totalQueries: 0,
       totalDuration: 0,
@@ -132,35 +136,46 @@ class PostgresClient {
     };
   }
 
-  async query(sql, params = [], options = {}) {
+  async query(table, method = "GET", body = null, queryParams = "") {
     const startTime = Date.now();
     const queryId = this.generateQueryId();
 
     try {
-      this.logQuery(queryId, sql, params);
+      this.logQuery(queryId, `${method} ${table}`, queryParams);
 
-      // Set query timeout
-      const timeout = options.timeout || this.config.database.queryTimeout;
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Query timeout")), timeout);
+      const url = `${this.baseUrl}/${table}${queryParams}`;
+      const response = await fetch(url, {
+        method,
+        headers: this.headers,
+        body: body ? JSON.stringify(body) : null,
       });
 
-      const queryPromise = this.sql(sql, params);
-      const result = await Promise.race([queryPromise, timeoutPromise]);
-
       const duration = Date.now() - startTime;
-      this.updateQueryStats(true, duration);
-      this.logQueryResult(queryId, duration, result.length);
 
-      return { rows: result, error: null };
+      if (!response.ok) {
+        const error = await response.json();
+        this.updateQueryStats(false, duration);
+        this.logQueryError(queryId, error, duration);
+        return { rows: null, error };
+      }
+
+      const data = await response.json();
+      this.updateQueryStats(true, duration);
+      this.logQueryResult(
+        queryId,
+        duration,
+        Array.isArray(data) ? data.length : 1
+      );
+
+      return { rows: data, error: null };
     } catch (error) {
       const duration = Date.now() - startTime;
       this.updateQueryStats(false, duration);
       this.logQueryError(queryId, error, duration);
-
-      // Sanitize error for production
-      const sanitizedError = this.sanitizeError(error);
-      return { rows: null, error: sanitizedError };
+      return {
+        rows: null,
+        error: { message: error.message, code: "API_ERROR" },
+      };
     }
   }
 
@@ -174,11 +189,11 @@ class PostgresClient {
     if (!success) this.queryStats.errors++;
   }
 
-  logQuery(queryId, sql, params) {
-    Logger.debug("Database Query", {
+  logQuery(queryId, operation, params) {
+    Logger.debug("Supabase Query", {
       queryId,
-      sql: sql.substring(0, 200) + (sql.length > 200 ? "..." : ""),
-      paramCount: params.length,
+      operation,
+      params: params.substring(0, 200) + (params.length > 200 ? "..." : ""),
     });
   }
 
@@ -193,291 +208,72 @@ class PostgresClient {
   logQueryError(queryId, error, duration) {
     Logger.error("Query Failed", {
       queryId,
-      error: error.message,
+      error: error.message || JSON.stringify(error),
       duration,
     });
   }
 
-  sanitizeError(error) {
-    // Remove sensitive information from error messages
-    const message = error.message
-      .replace(/password\s*=\s*[^\s]+/gi, "password=***")
-      .replace(/key\s*=\s*[^\s]+/gi, "key=***");
-
-    return {
-      message: "Database operation failed",
-      code: "DB_ERROR",
-      details: process.env.NODE_ENV === "development" ? message : undefined,
-    };
-  }
-
   buildSelectQuery(tableName, options = {}) {
-    const {
-      select = "*",
-      where = {},
-      orderBy,
-      limit,
-      offset,
-      joins = [],
-    } = options;
+    const { select = "*", where = {}, orderBy, limit, offset } = options;
 
-    let sql = `SELECT ${this.sanitizeSelectFields(
-      select
-    )} FROM ${this.sanitizeIdentifier(tableName)}`;
-    const params = [];
-    let paramIndex = 1;
+    const params = new URLSearchParams();
 
-    // Add JOINs
-    joins.forEach((join) => {
-      sql += ` ${join.type || "INNER"} JOIN ${this.sanitizeIdentifier(
-        join.table
-      )} ON ${join.condition}`;
-    });
-
-    // Add WHERE clause
-    const { whereClause, whereParams } = this.buildWhereClause(
-      where,
-      paramIndex
-    );
-    if (whereClause) {
-      sql += ` WHERE ${whereClause}`;
-      params.push(...whereParams);
-      paramIndex += whereParams.length;
+    // Add select
+    if (select !== "*") {
+      params.append("select", select);
     }
 
-    // Add ORDER BY
-    if (orderBy) {
-      const orderClauses = Array.isArray(orderBy) ? orderBy : [orderBy];
-      const sanitizedOrder = orderClauses.map((order) => {
-        const [column, direction] = order.split(".");
-        return `${this.sanitizeIdentifier(column)} ${
-          direction === "desc" ? "DESC" : "ASC"
-        }`;
-      });
-      sql += ` ORDER BY ${sanitizedOrder.join(", ")}`;
-    }
-
-    // Add LIMIT and OFFSET
-    if (limit) {
-      sql += ` LIMIT $${paramIndex}`;
-      params.push(parseInt(limit));
-      paramIndex++;
-    }
-
-    if (offset) {
-      sql += ` OFFSET $${paramIndex}`;
-      params.push(parseInt(offset));
-    }
-
-    return { sql, params };
-  }
-
-  buildInsertQuery(tableName, data, returning = "*") {
-    // Handle both single objects and arrays
-    const rows = Array.isArray(data) ? data : [data];
-
-    if (rows.length === 0) {
-      throw new Error("No data provided for insert");
-    }
-
-    // Get columns from the first row
-    const columns = Object.keys(rows[0]);
-    const allParams = [];
-    const valueGroups = [];
-    let paramIndex = 1;
-
-    // Build value groups for each row
-    for (const row of rows) {
-      const rowValues = columns.map((col) => row[col]);
-      const placeholders = rowValues.map(() => `$${paramIndex++}`);
-      valueGroups.push(`(${placeholders.join(", ")})`);
-      allParams.push(...rowValues);
-    }
-
-    const sql = `
-      INSERT INTO ${this.sanitizeIdentifier(tableName)} 
-      (${columns.map((col) => this.sanitizeIdentifier(col)).join(", ")}) 
-      VALUES ${valueGroups.join(", ")} 
-      RETURNING ${this.sanitizeSelectFields(returning)}
-    `;
-
-    return { sql, params: allParams };
-  }
-
-  buildUpdateQuery(tableName, data, where, returning = "*") {
-    const setClauses = [];
-    const params = [];
-    let paramIndex = 1;
-
-    // Build SET clause
-    for (const [key, value] of Object.entries(data)) {
-      setClauses.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
-      params.push(value);
-      paramIndex++;
-    }
-
-    // Build WHERE clause
-    const { whereClause, whereParams } = this.buildWhereClause(
-      where,
-      paramIndex
-    );
-    if (!whereClause) {
-      throw new Error("WHERE clause required for UPDATE operations");
-    }
-
-    params.push(...whereParams);
-
-    const sql = `
-      UPDATE ${this.sanitizeIdentifier(tableName)} 
-      SET ${setClauses.join(", ")} 
-      WHERE ${whereClause} 
-      RETURNING ${this.sanitizeSelectFields(returning)}
-    `;
-
-    return { sql, params };
-  }
-
-  buildDeleteQuery(tableName, where, returning = "*") {
-    const { whereClause, whereParams } = this.buildWhereClause(where, 1);
-    if (!whereClause) {
-      throw new Error("WHERE clause required for DELETE operations");
-    }
-
-    const sql = `
-      DELETE FROM ${this.sanitizeIdentifier(tableName)} 
-      WHERE ${whereClause} 
-      RETURNING ${this.sanitizeSelectFields(returning)}
-    `;
-
-    return { sql, params: whereParams };
-  }
-
-  buildWhereClause(where, startParamIndex = 1) {
-    const conditions = [];
-    const params = [];
-    let paramIndex = startParamIndex;
-
-    for (const [key, value] of Object.entries(where)) {
+    // Add filters
+    Object.entries(where).forEach(([key, value]) => {
       if (typeof value === "string" && value.includes(".")) {
         const [operator, filterValue] = value.split(".", 2);
-
-        switch (operator) {
-          case "eq":
-            conditions.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "neq":
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} != $${paramIndex}`
-            );
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "gt":
-            conditions.push(`${this.sanitizeIdentifier(key)} > $${paramIndex}`);
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "gte":
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} >= $${paramIndex}`
-            );
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "lt":
-            conditions.push(`${this.sanitizeIdentifier(key)} < $${paramIndex}`);
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "lte":
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} <= $${paramIndex}`
-            );
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "like":
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} LIKE $${paramIndex}`
-            );
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "ilike":
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} ILIKE $${paramIndex}`
-            );
-            params.push(filterValue);
-            paramIndex++;
-            break;
-          case "in":
-            const inValues = filterValue.split(",");
-            const placeholders = inValues
-              .map(() => `$${paramIndex++}`)
-              .join(",");
-            conditions.push(
-              `${this.sanitizeIdentifier(key)} IN (${placeholders})`
-            );
-            params.push(...inValues);
-            break;
-          case "is":
-            if (filterValue.toLowerCase() === "null") {
-              conditions.push(`${this.sanitizeIdentifier(key)} IS NULL`);
-            } else {
-              conditions.push(
-                `${this.sanitizeIdentifier(key)} IS $${paramIndex}`
-              );
-              params.push(filterValue);
-              paramIndex++;
-            }
-            break;
-        }
+        params.append(key, `${operator}.${filterValue}`);
       } else {
-        // Default to equality
-        conditions.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
-        params.push(value);
-        paramIndex++;
+        params.append(key, `eq.${value}`);
       }
+    });
+
+    // Add order
+    if (orderBy) {
+      params.append("order", orderBy);
     }
 
-    return {
-      whereClause: conditions.join(" AND "),
-      whereParams: params,
-    };
+    // Add limit and offset
+    if (limit) params.append("limit", limit);
+    if (offset) params.append("offset", offset);
+
+    return params.toString() ? `?${params.toString()}` : "";
   }
 
-  sanitizeIdentifier(identifier) {
-    // Allow only alphanumeric characters, underscores, and dots (for joins)
-    const sanitized = identifier.replace(/[^a-zA-Z0-9_.]/g, "");
-
-    // Validate against known patterns
-    if (!/^[a-zA-Z][a-zA-Z0-9_.]*$/.test(sanitized)) {
-      throw new Error(`Invalid identifier: ${identifier}`);
-    }
-
-    return sanitized;
+  async select(tableName, options = {}) {
+    const queryParams = this.buildSelectQuery(tableName, options);
+    return this.query(tableName, "GET", null, queryParams);
   }
 
-  sanitizeSelectFields(fields) {
-    if (fields === "*") return "*";
+  async insert(tableName, data) {
+    return this.query(tableName, "POST", data);
+  }
 
-    const fieldArray = Array.isArray(fields) ? fields : fields.split(",");
-    return fieldArray
-      .map((field) => field.trim())
-      .map((field) => {
-        // Handle aggregate functions and aliases
-        if (
-          field.includes("(") ||
-          field.includes(" as ") ||
-          field.includes(" AS ")
-        ) {
-          return field; // Allow complex expressions (validate separately if needed)
-        }
-        return this.sanitizeIdentifier(field);
-      })
-      .join(", ");
+  async update(tableName, data, where) {
+    const params = new URLSearchParams();
+    Object.entries(where).forEach(([key, value]) => {
+      params.append(key, `eq.${value}`);
+    });
+    const queryParams = params.toString() ? `?${params.toString()}` : "";
+    return this.query(tableName, "PATCH", data, queryParams);
+  }
+
+  async delete(tableName, where) {
+    const params = new URLSearchParams();
+    Object.entries(where).forEach(([key, value]) => {
+      params.append(key, `eq.${value}`);
+    });
+    const queryParams = params.toString() ? `?${params.toString()}` : "";
+    return this.query(tableName, "DELETE", null, queryParams);
+  }
+
+  async rpc(functionName, params = {}) {
+    return this.query(`rpc/${functionName}`, "POST", params);
   }
 
   getStats() {
@@ -777,6 +573,7 @@ class Validator {
       "user_roles",
       "permissions",
       "files",
+      "test",
     ];
 
     return allowedTables.includes(tableName);
@@ -1084,7 +881,7 @@ const Handlers = {
   // Initialize database client
   getDatabase(config) {
     if (!this._dbClient) {
-      this._dbClient = new PostgresClient(config);
+      this._dbClient = new SupabaseClient(config);
     }
     return this._dbClient;
   },
@@ -1109,27 +906,17 @@ const Handlers = {
             select: queryParams.select || "*",
             where: this.extractWhereParams(queryParams),
             orderBy: queryParams.order,
-            limit: queryParams.limit ? parseInt(queryParams.limit) : undefined,
-            offset: queryParams.offset
-              ? parseInt(queryParams.offset)
-              : undefined,
+            limit: queryParams.limit,
+            offset: queryParams.offset,
           };
 
-          const { sql, params } = db.buildSelectQuery(tableName, options);
-          const result = await db.query(sql, params);
-
+          const result = await db.select(tableName, options);
           return result.error ? { error: result.error } : { data: result.rows };
         }
 
         case "POST": {
           const body = await request.json();
-          const { sql, params } = db.buildInsertQuery(
-            tableName,
-            body,
-            queryParams.select
-          );
-          const result = await db.query(sql, params);
-
+          const result = await db.insert(tableName, body);
           return result.error ? { error: result.error } : { data: result.rows };
         }
 
@@ -1143,14 +930,7 @@ const Handlers = {
             };
           }
 
-          const { sql, params } = db.buildUpdateQuery(
-            tableName,
-            body,
-            where,
-            queryParams.select
-          );
-          const result = await db.query(sql, params);
-
+          const result = await db.update(tableName, body, where);
           return result.error ? { error: result.error } : { data: result.rows };
         }
 
@@ -1163,13 +943,7 @@ const Handlers = {
             };
           }
 
-          const { sql, params } = db.buildDeleteQuery(
-            tableName,
-            where,
-            queryParams.select
-          );
-          const result = await db.query(sql, params);
-
+          const result = await db.delete(tableName, where);
           return result.error ? { error: result.error } : { data: result.rows };
         }
 
@@ -1995,15 +1769,7 @@ const Handlers = {
         return { error: { message: "Invalid function name" } };
       }
 
-      const paramNames = Object.keys(payload);
-      const paramValues = Object.values(payload);
-      const paramPlaceholders = paramValues
-        .map((_, i) => `$${i + 1}`)
-        .join(", ");
-
-      const sql = `SELECT * FROM ${functionName}(${paramPlaceholders})`;
-      const result = await db.query(sql, paramValues);
-
+      const result = await db.rpc(functionName, payload);
       return result.error ? { error: result.error } : { data: result.rows };
     } catch (error) {
       Logger.error("RPC Function Error", {
@@ -2037,7 +1803,7 @@ export default {
         "Access-Control-Allow-Methods": config.cors.allowedMethods.join(", "),
         "Access-Control-Allow-Headers": config.cors.allowedHeaders.join(", "),
         "X-Request-ID": requestId,
-        "X-Saint-Central-Version": "2.0.0",
+        "X-Saint-Central-Version": "2.1.0",
         ...Security.generateSecureHeaders(),
       };
 
@@ -2127,7 +1893,7 @@ export default {
         return new Response(
           JSON.stringify({
             name: "Saint Central API",
-            version: "2.0.0",
+            version: "2.1.0",
             status: "operational",
             timestamp: new Date().toISOString(),
             requestId,
