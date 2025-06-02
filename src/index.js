@@ -1,866 +1,1171 @@
 /**
- * Saint Central Cloudflare Worker
+ * Saint Central Cloudflare Worker - Production Ready
  *
- * This worker acts as a secure middleware layer between the client SDK and Supabase,
- * adding enhanced security features while leveraging the Supabase SDK on the backend.
+ * Enterprise-grade secure middleware with direct PostgreSQL connections,
+ * comprehensive security, monitoring, and error handling.
+ *
+ * @version 2.0.0
+ * @author Saint Central Security Team
  */
 
-import { createClient } from "@supabase/supabase-js";
-import { Buffer } from "node:buffer"; // Updated to use node: prefix
+import { neon } from "@neondatabase/serverless";
 
-// Instead of importing nanoid, implement a simple ID generator
-function generateId(length = 16) {
-  const characters =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  const charactersLength = characters.length;
+// Production configuration with validation
+class Config {
+  constructor(env) {
+    this.validateEnvironment(env);
 
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    this.database = {
+      url: env.DATABASE_URL,
+      poolSize: parseInt(env.DB_POOL_SIZE || "10"),
+      connectionTimeout: parseInt(env.DB_CONNECTION_TIMEOUT || "30000"),
+      queryTimeout: parseInt(env.DB_QUERY_TIMEOUT || "60000"),
+    };
+
+    this.security = {
+      encryptionKey: env.ENCRYPTION_KEY,
+      jwtSecret: env.JWT_SECRET,
+      rateLimitEnabled: env.RATE_LIMIT_ENABLED === "true",
+      maxLoginAttempts: parseInt(env.MAX_LOGIN_ATTEMPTS || "5"),
+      loginLockoutDuration: parseInt(env.LOGIN_LOCKOUT_DURATION || "900000"), // 15 minutes
+      passwordMinLength: parseInt(env.PASSWORD_MIN_LENGTH || "12"),
+      sessionTimeout: parseInt(env.SESSION_TIMEOUT || "86400000"), // 24 hours
+    };
+
+    this.supabase = {
+      url: env.SUPABASE_URL,
+      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      anonKey: env.SUPABASE_ANON_KEY,
+    };
+
+    this.monitoring = {
+      logLevel: env.LOG_LEVEL || "info",
+      enableMetrics: env.ENABLE_METRICS === "true",
+      enableTracing: env.ENABLE_TRACING === "true",
+    };
+
+    this.cors = {
+      allowedOrigins: env.ALLOWED_ORIGINS?.split(",") || ["*"],
+      allowedMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Security-Nonce",
+        "X-Request-ID",
+        "X-Client-Version",
+        "X-API-Key",
+      ],
+    };
   }
 
-  return result;
+  validateEnvironment(env) {
+    const required = [
+      "DATABASE_URL",
+      "ENCRYPTION_KEY",
+      "JWT_SECRET",
+      "SUPABASE_URL",
+      "SUPABASE_SERVICE_ROLE_KEY",
+    ];
+
+    const missing = required.filter((key) => !env[key]);
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required environment variables: ${missing.join(", ")}`
+      );
+    }
+
+    // Validate URL formats
+    try {
+      new URL(env.SUPABASE_URL);
+      if (
+        !env.DATABASE_URL.startsWith("postgres://") &&
+        !env.DATABASE_URL.startsWith("postgresql://")
+      ) {
+        throw new Error(
+          "DATABASE_URL must be a valid PostgreSQL connection string"
+        );
+      }
+    } catch (error) {
+      throw new Error(`Invalid URL in environment variables: ${error.message}`);
+    }
+
+    // Validate key lengths
+    if (env.ENCRYPTION_KEY.length < 32) {
+      throw new Error("ENCRYPTION_KEY must be at least 32 characters");
+    }
+    if (env.JWT_SECRET.length < 32) {
+      throw new Error("JWT_SECRET must be at least 32 characters");
+    }
+  }
 }
 
-/**
- * Security utility functions
- */
-const Security = {
-  // Rate limiting implementation using Cloudflare's KV store
-  rateLimit: async (request, env, ctx) => {
-    if (env.RATE_LIMIT_ENABLED !== "true") return true;
+// Production-grade PostgreSQL client
+class PostgresClient {
+  constructor(config) {
+    this.config = config;
+    this.sql = neon(config.database.url);
+    this.connectionPool = new Map();
+    this.queryStats = {
+      totalQueries: 0,
+      totalDuration: 0,
+      errors: 0,
+    };
+  }
 
-    const clientIP = request.headers.get("CF-Connecting-IP");
-    const endpoint = new URL(request.url).pathname;
-    const rateKey = `ratelimit:${clientIP}:${endpoint}`;
+  async query(sql, params = [], options = {}) {
+    const startTime = Date.now();
+    const queryId = this.generateQueryId();
 
-    // Get current rate limit data
-    const rateLimitData = await env.SAINT_CENTRAL_KV.get(rateKey, {
-      type: "json",
+    try {
+      this.logQuery(queryId, sql, params);
+
+      // Set query timeout
+      const timeout = options.timeout || this.config.database.queryTimeout;
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Query timeout")), timeout);
+      });
+
+      const queryPromise = this.sql(sql, params);
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+
+      const duration = Date.now() - startTime;
+      this.updateQueryStats(true, duration);
+      this.logQueryResult(queryId, duration, result.length);
+
+      return { rows: result, error: null };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.updateQueryStats(false, duration);
+      this.logQueryError(queryId, error, duration);
+
+      // Sanitize error for production
+      const sanitizedError = this.sanitizeError(error);
+      return { rows: null, error: sanitizedError };
+    }
+  }
+
+  generateQueryId() {
+    return `q_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  updateQueryStats(success, duration) {
+    this.queryStats.totalQueries++;
+    this.queryStats.totalDuration += duration;
+    if (!success) this.queryStats.errors++;
+  }
+
+  logQuery(queryId, sql, params) {
+    Logger.debug("Database Query", {
+      queryId,
+      sql: sql.substring(0, 200) + (sql.length > 200 ? "..." : ""),
+      paramCount: params.length,
     });
-    const now = Date.now();
+  }
 
-    if (!rateLimitData) {
-      // First request, set initial count
-      await env.SAINT_CENTRAL_KV.put(
-        rateKey,
-        JSON.stringify({
-          count: 1,
-          resetAt: now + 60000, // Reset after 1 minute
-        }),
-        { expirationTtl: 60 }
-      ); // Auto-expire after 60 seconds
-      return true;
-    }
+  logQueryResult(queryId, duration, rowCount) {
+    Logger.info("Query Completed", {
+      queryId,
+      duration,
+      rowCount,
+    });
+  }
 
-    if (now > rateLimitData.resetAt) {
-      // Reset period has passed
-      await env.SAINT_CENTRAL_KV.put(
-        rateKey,
-        JSON.stringify({
-          count: 1,
-          resetAt: now + 60000,
-        }),
-        { expirationTtl: 60 }
-      );
-      return true;
-    }
+  logQueryError(queryId, error, duration) {
+    Logger.error("Query Failed", {
+      queryId,
+      error: error.message,
+      duration,
+    });
+  }
 
-    // Increment count and check limit
-    const newCount = rateLimitData.count + 1;
+  sanitizeError(error) {
+    // Remove sensitive information from error messages
+    const message = error.message
+      .replace(/password\s*=\s*[^\s]+/gi, "password=***")
+      .replace(/key\s*=\s*[^\s]+/gi, "key=***");
 
-    // Check if rate limit exceeded (100 requests per minute)
-    if (newCount > 100) {
-      return false;
-    }
+    return {
+      message: "Database operation failed",
+      code: "DB_ERROR",
+      details: process.env.NODE_ENV === "development" ? message : undefined,
+    };
+  }
 
-    // Update count
-    await env.SAINT_CENTRAL_KV.put(
-      rateKey,
-      JSON.stringify({
-        count: newCount,
-        resetAt: rateLimitData.resetAt,
-      }),
-      { expirationTtl: 60 }
+  buildSelectQuery(tableName, options = {}) {
+    const {
+      select = "*",
+      where = {},
+      orderBy,
+      limit,
+      offset,
+      joins = [],
+    } = options;
+
+    let sql = `SELECT ${this.sanitizeSelectFields(
+      select
+    )} FROM ${this.sanitizeIdentifier(tableName)}`;
+    const params = [];
+    let paramIndex = 1;
+
+    // Add JOINs
+    joins.forEach((join) => {
+      sql += ` ${join.type || "INNER"} JOIN ${this.sanitizeIdentifier(
+        join.table
+      )} ON ${join.condition}`;
+    });
+
+    // Add WHERE clause
+    const { whereClause, whereParams } = this.buildWhereClause(
+      where,
+      paramIndex
     );
+    if (whereClause) {
+      sql += ` WHERE ${whereClause}`;
+      params.push(...whereParams);
+      paramIndex += whereParams.length;
+    }
 
-    return true;
-  },
+    // Add ORDER BY
+    if (orderBy) {
+      const orderClauses = Array.isArray(orderBy) ? orderBy : [orderBy];
+      const sanitizedOrder = orderClauses.map((order) => {
+        const [column, direction] = order.split(".");
+        return `${this.sanitizeIdentifier(column)} ${
+          direction === "desc" ? "DESC" : "ASC"
+        }`;
+      });
+      sql += ` ORDER BY ${sanitizedOrder.join(", ")}`;
+    }
 
-  // JWT verification
-  verifyJWT: async (token, env) => {
+    // Add LIMIT and OFFSET
+    if (limit) {
+      sql += ` LIMIT $${paramIndex}`;
+      params.push(parseInt(limit));
+      paramIndex++;
+    }
+
+    if (offset) {
+      sql += ` OFFSET $${paramIndex}`;
+      params.push(parseInt(offset));
+    }
+
+    return { sql, params };
+  }
+
+  buildInsertQuery(tableName, data, returning = "*") {
+    const columns = Object.keys(data);
+    const values = Object.values(data);
+    const placeholders = values.map((_, i) => `$${i + 1}`);
+
+    const sql = `
+      INSERT INTO ${this.sanitizeIdentifier(tableName)} 
+      (${columns.map((col) => this.sanitizeIdentifier(col)).join(", ")}) 
+      VALUES (${placeholders.join(", ")}) 
+      RETURNING ${this.sanitizeSelectFields(returning)}
+    `;
+
+    return { sql, params: values };
+  }
+
+  buildUpdateQuery(tableName, data, where, returning = "*") {
+    const setClauses = [];
+    const params = [];
+    let paramIndex = 1;
+
+    // Build SET clause
+    for (const [key, value] of Object.entries(data)) {
+      setClauses.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
+      params.push(value);
+      paramIndex++;
+    }
+
+    // Build WHERE clause
+    const { whereClause, whereParams } = this.buildWhereClause(
+      where,
+      paramIndex
+    );
+    if (!whereClause) {
+      throw new Error("WHERE clause required for UPDATE operations");
+    }
+
+    params.push(...whereParams);
+
+    const sql = `
+      UPDATE ${this.sanitizeIdentifier(tableName)} 
+      SET ${setClauses.join(", ")} 
+      WHERE ${whereClause} 
+      RETURNING ${this.sanitizeSelectFields(returning)}
+    `;
+
+    return { sql, params };
+  }
+
+  buildDeleteQuery(tableName, where, returning = "*") {
+    const { whereClause, whereParams } = this.buildWhereClause(where, 1);
+    if (!whereClause) {
+      throw new Error("WHERE clause required for DELETE operations");
+    }
+
+    const sql = `
+      DELETE FROM ${this.sanitizeIdentifier(tableName)} 
+      WHERE ${whereClause} 
+      RETURNING ${this.sanitizeSelectFields(returning)}
+    `;
+
+    return { sql, params: whereParams };
+  }
+
+  buildWhereClause(where, startParamIndex = 1) {
+    const conditions = [];
+    const params = [];
+    let paramIndex = startParamIndex;
+
+    for (const [key, value] of Object.entries(where)) {
+      if (typeof value === "string" && value.includes(".")) {
+        const [operator, filterValue] = value.split(".", 2);
+
+        switch (operator) {
+          case "eq":
+            conditions.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "neq":
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} != $${paramIndex}`
+            );
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "gt":
+            conditions.push(`${this.sanitizeIdentifier(key)} > $${paramIndex}`);
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "gte":
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} >= $${paramIndex}`
+            );
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "lt":
+            conditions.push(`${this.sanitizeIdentifier(key)} < $${paramIndex}`);
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "lte":
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} <= $${paramIndex}`
+            );
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "like":
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} LIKE $${paramIndex}`
+            );
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "ilike":
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} ILIKE $${paramIndex}`
+            );
+            params.push(filterValue);
+            paramIndex++;
+            break;
+          case "in":
+            const inValues = filterValue.split(",");
+            const placeholders = inValues
+              .map(() => `$${paramIndex++}`)
+              .join(",");
+            conditions.push(
+              `${this.sanitizeIdentifier(key)} IN (${placeholders})`
+            );
+            params.push(...inValues);
+            break;
+          case "is":
+            if (filterValue.toLowerCase() === "null") {
+              conditions.push(`${this.sanitizeIdentifier(key)} IS NULL`);
+            } else {
+              conditions.push(
+                `${this.sanitizeIdentifier(key)} IS $${paramIndex}`
+              );
+              params.push(filterValue);
+              paramIndex++;
+            }
+            break;
+        }
+      } else {
+        // Default to equality
+        conditions.push(`${this.sanitizeIdentifier(key)} = $${paramIndex}`);
+        params.push(value);
+        paramIndex++;
+      }
+    }
+
+    return {
+      whereClause: conditions.join(" AND "),
+      whereParams: params,
+    };
+  }
+
+  sanitizeIdentifier(identifier) {
+    // Allow only alphanumeric characters, underscores, and dots (for joins)
+    const sanitized = identifier.replace(/[^a-zA-Z0-9_.]/g, "");
+
+    // Validate against known patterns
+    if (!/^[a-zA-Z][a-zA-Z0-9_.]*$/.test(sanitized)) {
+      throw new Error(`Invalid identifier: ${identifier}`);
+    }
+
+    return sanitized;
+  }
+
+  sanitizeSelectFields(fields) {
+    if (fields === "*") return "*";
+
+    const fieldArray = Array.isArray(fields) ? fields : fields.split(",");
+    return fieldArray
+      .map((field) => field.trim())
+      .map((field) => {
+        // Handle aggregate functions and aliases
+        if (
+          field.includes("(") ||
+          field.includes(" as ") ||
+          field.includes(" AS ")
+        ) {
+          return field; // Allow complex expressions (validate separately if needed)
+        }
+        return this.sanitizeIdentifier(field);
+      })
+      .join(", ");
+  }
+
+  getStats() {
+    return {
+      ...this.queryStats,
+      averageDuration:
+        this.queryStats.totalQueries > 0
+          ? this.queryStats.totalDuration / this.queryStats.totalQueries
+          : 0,
+      errorRate:
+        this.queryStats.totalQueries > 0
+          ? this.queryStats.errors / this.queryStats.totalQueries
+          : 0,
+    };
+  }
+}
+
+// Production logging system
+class Logger {
+  static logLevel = "info";
+  static levels = { error: 0, warn: 1, info: 2, debug: 3 };
+
+  static setLevel(level) {
+    this.logLevel = level;
+  }
+
+  static shouldLog(level) {
+    return this.levels[level] <= this.levels[this.logLevel];
+  }
+
+  static log(level, message, data = {}) {
+    if (!this.shouldLog(level)) return;
+
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      level,
+      message,
+      ...data,
+    };
+
+    console.log(JSON.stringify(logEntry));
+  }
+
+  static error(message, data) {
+    this.log("error", message, data);
+  }
+  static warn(message, data) {
+    this.log("warn", message, data);
+  }
+  static info(message, data) {
+    this.log("info", message, data);
+  }
+  static debug(message, data) {
+    this.log("debug", message, data);
+  }
+}
+
+// Production-grade encryption
+class Encryption {
+  constructor(key) {
+    this.key = key;
+  }
+
+  async encrypt(data) {
+    try {
+      const encoder = new TextEncoder();
+      const dataBuffer = encoder.encode(JSON.stringify(data));
+
+      // Generate a random IV
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      // Import the key
+      const keyBuffer = encoder.encode(this.key.padEnd(32, "0").slice(0, 32));
+      const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        keyBuffer,
+        { name: "AES-GCM" },
+        false,
+        ["encrypt"]
+      );
+
+      // Encrypt the data
+      const encryptedBuffer = await crypto.subtle.encrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        dataBuffer
+      );
+
+      // Combine IV and encrypted data
+      const result = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+      result.set(iv, 0);
+      result.set(new Uint8Array(encryptedBuffer), iv.length);
+
+      // Convert to base64
+      const base64 = btoa(String.fromCharCode(...result));
+
+      return {
+        version: 2,
+        algorithm: "aes-256-gcm",
+        data: base64,
+        encrypted: true,
+      };
+    } catch (error) {
+      Logger.error("Encryption failed", { error: error.message });
+      throw new Error("Encryption failed");
+    }
+  }
+
+  async decrypt(encryptedData) {
+    try {
+      if (!encryptedData || typeof encryptedData !== "object") {
+        return encryptedData;
+      }
+
+      if (!encryptedData.encrypted || encryptedData.version !== 2) {
+        return encryptedData;
+      }
+
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+
+      // Decode base64
+      const combined = Uint8Array.from(atob(encryptedData.data), (c) =>
+        c.charCodeAt(0)
+      );
+
+      // Extract IV and encrypted data
+      const iv = combined.slice(0, 12);
+      const encrypted = combined.slice(12);
+
+      // Import the key
+      const keyBuffer = encoder.encode(this.key.padEnd(32, "0").slice(0, 32));
+      const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        keyBuffer,
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"]
+      );
+
+      // Decrypt the data
+      const decryptedBuffer = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        encrypted
+      );
+
+      // Convert back to string and parse JSON
+      const decryptedString = decoder.decode(decryptedBuffer);
+      return JSON.parse(decryptedString);
+    } catch (error) {
+      Logger.error("Decryption failed", { error: error.message });
+      throw new Error("Decryption failed");
+    }
+  }
+}
+
+// JWT utilities with proper verification
+class JWT {
+  constructor(secret) {
+    this.secret = secret;
+  }
+
+  async verify(token) {
     try {
       if (!token) return null;
 
-      // Basic structure validation
       const parts = token.split(".");
       if (parts.length !== 3) return null;
 
-      // Decode payload
-      const payload = JSON.parse(atob(parts[1]));
+      const [headerB64, payloadB64, signatureB64] = parts;
+
+      // Decode header and payload
+      const header = JSON.parse(atob(headerB64));
+      const payload = JSON.parse(atob(payloadB64));
 
       // Check expiration
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
         return null;
       }
 
-      // In a real implementation, you would verify the signature using JWT libraries
-      // For now, we'll just check some basic properties
+      // Verify signature using Web Crypto API
+      const data = `${headerB64}.${payloadB64}`;
+      const signature = this.base64UrlDecode(signatureB64);
 
-      return payload;
-    } catch (error) {
-      console.error("JWT verification error:", error);
-      return null;
-    }
-  },
+      const encoder = new TextEncoder();
+      const keyBuffer = encoder.encode(this.secret);
+      const dataBuffer = encoder.encode(data);
 
-  // Enhanced encryption/decryption implementation
-  // In a real implementation, this would use Web Crypto API or a strong encryption library
-  _getEncryptionKey: (env) => {
-    // In a real implementation, this would load from env variables or KV
-    return env.ENCRYPTION_KEY || "this-is-a-demo-key-replace-in-production";
-  },
-
-  _generateIV: () => {
-    // In a real implementation, this would generate a real IV for AES-GCM
-    // For demonstration purposes only
-    const array = new Uint8Array(12);
-    crypto.getRandomValues(array);
-    return Array.from(array)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  },
-
-  // Payload encryption/decryption
-  decryptPayload: (encryptedData, env) => {
-    try {
-      console.log("Starting decryption process");
-
-      // Handle encrypted data from the SDK
-      if (!encryptedData || typeof encryptedData !== "string") {
-        console.log("Payload is not a string or is empty");
-        return encryptedData;
-      }
-
-      console.log(
-        "Attempting to decrypt payload:",
-        encryptedData.substring(0, 100) + "..."
+      const cryptoKey = await crypto.subtle.importKey(
+        "raw",
+        keyBuffer,
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
       );
 
-      // Check if this is SDK-encrypted data
-      try {
-        const parsed = JSON.parse(encryptedData);
-        console.log(
-          "Successfully parsed JSON. Checking if encrypted format:",
-          parsed
-        );
+      const isValid = await crypto.subtle.verify(
+        "HMAC",
+        cryptoKey,
+        signature,
+        dataBuffer
+      );
 
-        if (parsed && parsed.encrypted === true && parsed.version === 1) {
-          console.log(
-            "Detected SDK encrypted format. Data sample:",
-            parsed.data.substring(0, 50) + "..."
-          );
-
-          // This is data encrypted by the SDK
-          try {
-            // In a real implementation, this would use proper decryption
-            // with the algorithm specified in parsed.algorithm
-            const decrypted = JSON.parse(parsed.data);
-            console.log(
-              "Successfully decrypted. Result format:",
-              Object.keys(decrypted)
-            );
-            return decrypted;
-          } catch (err) {
-            console.error("Failed to decrypt SDK payload:", err);
-            throw new Error("Invalid encrypted format");
-          }
-        } else {
-          console.log("Not in SDK encrypted format, returning as is");
-          return parsed;
-        }
-      } catch (e) {
-        console.log("Not valid JSON or not in expected format:", e.message);
-        // Not JSON or not in the expected format, continue with other checks
-      }
-
-      // Legacy format check
-      if (encryptedData.startsWith("ENC:")) {
-        console.log("Legacy ENC: format detected");
-        const data = encryptedData.substring(4);
-        // Simple XOR decryption as placeholder
-        return JSON.parse(data);
-      }
-
-      console.log("No encryption format detected, returning as is");
-      return encryptedData;
+      return isValid ? payload : null;
     } catch (error) {
-      console.error("Decryption error:", error);
-      return encryptedData;
+      Logger.error("JWT verification failed", { error: error.message });
+      return null;
     }
-  },
+  }
 
-  encryptPayload: (data, env) => {
+  base64UrlDecode(str) {
+    // Convert base64url to base64
+    str = str.replace(/-/g, "+").replace(/_/g, "/");
+    // Add padding if needed
+    while (str.length % 4) {
+      str += "=";
+    }
+    // Decode base64
+    return Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+  }
+}
+
+// Input validation
+class Validator {
+  static email(email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  static password(password, minLength = 12) {
+    if (!password || password.length < minLength) {
+      return {
+        valid: false,
+        message: `Password must be at least ${minLength} characters`,
+      };
+    }
+
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+
+    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      return {
+        valid: false,
+        message:
+          "Password must contain uppercase, lowercase, number, and special character",
+      };
+    }
+
+    return { valid: true };
+  }
+
+  static sanitizeInput(input, maxLength = 1000) {
+    if (typeof input !== "string") return input;
+
+    return input.trim().slice(0, maxLength).replace(/[<>]/g, ""); // Basic XSS prevention
+  }
+
+  static validateTableName(tableName) {
+    const allowedTables = [
+      "users",
+      "profiles",
+      "posts",
+      "comments",
+      "sessions",
+      "audit_logs",
+      "user_roles",
+      "permissions",
+      "files",
+    ];
+
+    return allowedTables.includes(tableName);
+  }
+}
+
+// Enhanced security utilities
+const Security = {
+  async rateLimit(request, env, config) {
+    if (!config.security.rateLimitEnabled) return { allowed: true };
+
+    const clientIP = request.headers.get("CF-Connecting-IP");
+    const endpoint = new URL(request.url).pathname;
+    const method = request.method;
+    const rateKey = `ratelimit:${clientIP}:${method}:${endpoint}`;
+
     try {
-      // In a real implementation, this would use proper encryption APIs
-      if (!data) return data;
-
-      // For demonstration purposes - in production use real encryption
-      const iv = Security._generateIV();
-      // In a real implementation, this would encrypt data with AES-GCM
-
-      return JSON.stringify({
-        version: 1,
-        algorithm: "aes-256-gcm",
-        iv: iv,
-        data: JSON.stringify(data),
-        encrypted: true,
+      const rateLimitData = await env.SAINT_CENTRAL_KV.get(rateKey, {
+        type: "json",
       });
+      const now = Date.now();
+      const windowSize = 60000; // 1 minute
+      const maxRequests = this.getRateLimitForEndpoint(endpoint, method);
+
+      if (!rateLimitData) {
+        await env.SAINT_CENTRAL_KV.put(
+          rateKey,
+          JSON.stringify({ count: 1, resetAt: now + windowSize }),
+          { expirationTtl: 60 }
+        );
+        return { allowed: true };
+      }
+
+      if (now > rateLimitData.resetAt) {
+        await env.SAINT_CENTRAL_KV.put(
+          rateKey,
+          JSON.stringify({ count: 1, resetAt: now + windowSize }),
+          { expirationTtl: 60 }
+        );
+        return { allowed: true };
+      }
+
+      const newCount = rateLimitData.count + 1;
+
+      if (newCount > maxRequests) {
+        return {
+          allowed: false,
+          resetAt: rateLimitData.resetAt,
+          remaining: 0,
+          limit: maxRequests,
+        };
+      }
+
+      await env.SAINT_CENTRAL_KV.put(
+        rateKey,
+        JSON.stringify({ count: newCount, resetAt: rateLimitData.resetAt }),
+        { expirationTtl: 60 }
+      );
+
+      return {
+        allowed: true,
+        remaining: maxRequests - newCount,
+        limit: maxRequests,
+        resetAt: rateLimitData.resetAt,
+      };
     } catch (error) {
-      console.error("Encryption error:", error);
-      return data;
+      Logger.error("Rate limiting error", { error: error.message });
+      return { allowed: true }; // Fail open for availability
     }
   },
 
-  // DDoS protection header checks
-  checkSecurityHeaders: (request) => {
-    // Get client country from Cloudflare headers
+  getRateLimitForEndpoint(endpoint, method) {
+    // Different rate limits for different endpoints
+    if (endpoint.includes("/auth/signin")) return 10; // Stricter for login
+    if (endpoint.includes("/auth/signup")) return 5; // Stricter for signup
+    if (method === "POST") return 30;
+    if (method === "GET") return 100;
+    return 50; // Default
+  },
+
+  async checkBruteForce(email, env, config) {
+    const key = `bruteforce:${email}`;
+    const attempts = (await env.SAINT_CENTRAL_KV.get(key, {
+      type: "json",
+    })) || { count: 0, lastAttempt: 0 };
+
+    const now = Date.now();
+    const lockoutDuration = config.security.loginLockoutDuration;
+
+    if (
+      attempts.count >= config.security.maxLoginAttempts &&
+      now - attempts.lastAttempt < lockoutDuration
+    ) {
+      return {
+        blocked: true,
+        remainingTime: lockoutDuration - (now - attempts.lastAttempt),
+      };
+    }
+
+    return { blocked: false };
+  },
+
+  async recordFailedLogin(email, env, config) {
+    const key = `bruteforce:${email}`;
+    const attempts = (await env.SAINT_CENTRAL_KV.get(key, {
+      type: "json",
+    })) || { count: 0, lastAttempt: 0 };
+
+    const newAttempts = {
+      count: attempts.count + 1,
+      lastAttempt: Date.now(),
+    };
+
+    await env.SAINT_CENTRAL_KV.put(key, JSON.stringify(newAttempts), {
+      expirationTtl: Math.floor(config.security.loginLockoutDuration / 1000),
+    });
+  },
+
+  async clearFailedLogins(email, env) {
+    const key = `bruteforce:${email}`;
+    await env.SAINT_CENTRAL_KV.delete(key);
+  },
+
+  checkSecurityHeaders(request) {
     const country = request.headers.get("CF-IPCountry");
     const clientIP = request.headers.get("CF-Connecting-IP");
     const bot = request.headers.get("CF-Bot");
+    const threat = request.headers.get("CF-Threat-Score");
 
-    // For demo purposes, simple country blocking logic
-    const blockedCountries = ["XX", "YY"]; // Replace with actual country codes if needed
+    // Enhanced threat detection
+    const blockedCountries = process.env.BLOCKED_COUNTRIES?.split(",") || [];
     if (blockedCountries.includes(country)) {
       return { allowed: false, reason: "COUNTRY_BLOCKED" };
     }
 
-    // Bot detection
     if (bot === "likely") {
       return { allowed: false, reason: "BOT_DETECTED" };
+    }
+
+    if (threat && parseInt(threat) > 20) {
+      return { allowed: false, reason: "HIGH_THREAT_SCORE" };
     }
 
     return { allowed: true };
   },
 
-  // Validate Content-Security-Policy
-  enforceCSP: (response) => {
-    const headers = new Headers(response.headers);
-
-    // Set strong Content-Security-Policy
-    headers.set(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; object-src 'none'; upgrade-insecure-requests;"
-    );
-
-    // Set other security headers
-    headers.set("X-Content-Type-Options", "nosniff");
-    headers.set("X-Frame-Options", "DENY");
-    headers.set("X-XSS-Protection", "1; mode=block");
-    headers.set("Referrer-Policy", "no-referrer");
-    headers.set(
-      "Strict-Transport-Security",
-      "max-age=31536000; includeSubDomains; preload"
-    );
-
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+  generateSecureHeaders() {
+    return {
+      "Content-Security-Policy": [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: https:",
+        "connect-src 'self'",
+        "font-src 'self'",
+        "object-src 'none'",
+        "media-src 'self'",
+        "frame-src 'none'",
+        "upgrade-insecure-requests",
+      ].join("; "),
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "X-XSS-Protection": "1; mode=block",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Strict-Transport-Security":
+        "max-age=31536000; includeSubDomains; preload",
+      "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    };
   },
 
-  // Generate secure request ID for tracing
-  generateRequestId: () => {
-    return generateId(16); // Using our custom function instead of nanoid
+  generateRequestId() {
+    return `req_${Date.now()}_${crypto.randomUUID()}`;
   },
 
-  // Log security events
-  logSecurityEvent: async (event, env) => {
-    // In production, send to security logging system
-    console.log(`SECURITY EVENT: ${JSON.stringify(event)}`);
+  async logSecurityEvent(event, env) {
+    try {
+      const logEntry = {
+        ...event,
+        timestamp: new Date().toISOString(),
+        severity: this.getEventSeverity(event.type),
+      };
 
-    // Optionally store in KV for analysis
-    if (env.SAINT_CENTRAL_KV) {
-      const logKey = `security:log:${Date.now()}:${generateId(6)}`;
-      await env.SAINT_CENTRAL_KV.put(logKey, JSON.stringify(event), {
-        expirationTtl: 86400 * 7,
-      }); // Keep for 7 days
+      Logger.warn("Security Event", logEntry);
+
+      if (env.SAINT_CENTRAL_KV) {
+        const logKey = `security:${
+          event.type
+        }:${Date.now()}:${crypto.randomUUID()}`;
+        await env.SAINT_CENTRAL_KV.put(logKey, JSON.stringify(logEntry), {
+          expirationTtl: 86400 * 30, // Keep for 30 days
+        });
+      }
+
+      // Send critical events to external monitoring
+      if (logEntry.severity === "critical") {
+        await this.sendToExternalMonitoring(logEntry, env);
+      }
+    } catch (error) {
+      Logger.error("Failed to log security event", { error: error.message });
+    }
+  },
+
+  getEventSeverity(eventType) {
+    const criticalEvents = [
+      "MALWARE_DETECTED",
+      "SQL_INJECTION_ATTEMPT",
+      "UNAUTHORIZED_ADMIN_ACCESS",
+    ];
+    const highEvents = [
+      "BRUTE_FORCE_DETECTED",
+      "RATE_LIMIT_EXCEEDED",
+      "SUSPICIOUS_ACTIVITY",
+    ];
+
+    if (criticalEvents.includes(eventType)) return "critical";
+    if (highEvents.includes(eventType)) return "high";
+    return "medium";
+  },
+
+  async sendToExternalMonitoring(event, env) {
+    // Integrate with external monitoring services
+    // This is a placeholder for services like Datadog, Sentry, etc.
+    if (env.WEBHOOK_URL) {
+      try {
+        await fetch(env.WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(event),
+        });
+      } catch (error) {
+        Logger.error("Failed to send to external monitoring", {
+          error: error.message,
+        });
+      }
     }
   },
 };
 
-/**
- * Request handlers for different Supabase services
- */
+// Enhanced file scanner
+async function scanFileForMalware(fileData, filename) {
+  const threats = [];
+
+  // File size limits
+  if (fileData.byteLength > 100 * 1024 * 1024) {
+    // 100MB
+    threats.push("FILE_TOO_LARGE");
+  }
+
+  // Header analysis
+  const header = new Uint8Array(fileData.slice(0, 20));
+
+  // Check for executable files
+  if (header[0] === 77 && header[1] === 90) threats.push("WINDOWS_EXECUTABLE"); // MZ
+  if (
+    header[0] === 127 &&
+    header[1] === 69 &&
+    header[2] === 76 &&
+    header[3] === 70
+  ) {
+    threats.push("LINUX_EXECUTABLE"); // ELF
+  }
+
+  // Check for script files by extension
+  const dangerousExtensions = [
+    ".exe",
+    ".bat",
+    ".cmd",
+    ".scr",
+    ".pif",
+    ".jar",
+    ".sh",
+  ];
+  const ext = filename.toLowerCase().substring(filename.lastIndexOf("."));
+  if (dangerousExtensions.includes(ext)) {
+    threats.push("DANGEROUS_EXTENSION");
+  }
+
+  // Simple pattern matching for common malware signatures
+  const dataString = new TextDecoder("utf-8", { fatal: false }).decode(
+    fileData.slice(0, 10000)
+  );
+  const malwarePatterns = [
+    /eval\s*\(/gi,
+    /document\.write\s*\(/gi,
+    /javascript:\s*void/gi,
+    /<script[^>]*>[\s\S]*?<\/script>/gi,
+  ];
+
+  for (const pattern of malwarePatterns) {
+    if (pattern.test(dataString)) {
+      threats.push("SUSPICIOUS_PATTERN");
+      break;
+    }
+  }
+
+  return {
+    safe: threats.length === 0,
+    threats,
+    scannedAt: Date.now(),
+  };
+}
+
+// Production request handlers
 const Handlers = {
-  // Initialize Supabase client with service key
-  getSupabaseClient: (env) => {
-    return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+  // Initialize database client
+  getDatabase(config) {
+    if (!this._dbClient) {
+      this._dbClient = new PostgresClient(config);
+    }
+    return this._dbClient;
   },
 
-  // Handle database requests
-  async handleDatabase(request, env, ctx, pathParts) {
-    const supabase = this.getSupabaseClient(env);
-    const tableName = pathParts[2]; // rest/v1/{tableName}
+  // Handle database operations
+  async handleDatabase(request, env, config, pathParts) {
+    const db = this.getDatabase(config);
+    const tableName = pathParts[2];
 
-    // Convert request to query parameters
+    // Validate table name
+    if (!Validator.validateTableName(tableName)) {
+      return { error: { message: "Table not found", code: "TABLE_NOT_FOUND" } };
+    }
+
     const url = new URL(request.url);
-    const params = Object.fromEntries(url.searchParams.entries());
+    const queryParams = Object.fromEntries(url.searchParams.entries());
 
-    // Process different HTTP methods
-    switch (request.method) {
-      case "GET": {
-        // Build query from URL parameters
-        let query = supabase.from(tableName).select(params.select || "*");
+    try {
+      switch (request.method) {
+        case "GET": {
+          const options = {
+            select: queryParams.select || "*",
+            where: this.extractWhereParams(queryParams),
+            orderBy: queryParams.order,
+            limit: queryParams.limit ? parseInt(queryParams.limit) : undefined,
+            offset: queryParams.offset
+              ? parseInt(queryParams.offset)
+              : undefined,
+          };
 
-        // Apply filters
-        for (const [key, value] of Object.entries(params)) {
-          if (
-            key !== "select" &&
-            key !== "order" &&
-            key !== "limit" &&
-            key !== "offset"
-          ) {
-            const [operator, filterValue] = value.split(".");
-            if (operator && filterValue) {
-              switch (operator) {
-                case "eq":
-                  query = query.eq(key, filterValue);
-                  break;
-                case "neq":
-                  query = query.neq(key, filterValue);
-                  break;
-                case "gt":
-                  query = query.gt(key, filterValue);
-                  break;
-                case "lt":
-                  query = query.lt(key, filterValue);
-                  break;
-                case "gte":
-                  query = query.gte(key, filterValue);
-                  break;
-                case "lte":
-                  query = query.lte(key, filterValue);
-                  break;
-                case "like":
-                  query = query.like(key, filterValue);
-                  break;
-                case "ilike":
-                  query = query.ilike(key, filterValue);
-                  break;
-              }
-            }
+          const { sql, params } = db.buildSelectQuery(tableName, options);
+          const result = await db.query(sql, params);
+
+          return result.error ? { error: result.error } : { data: result.rows };
+        }
+
+        case "POST": {
+          const body = await request.json();
+          const { sql, params } = db.buildInsertQuery(
+            tableName,
+            body,
+            queryParams.select
+          );
+          const result = await db.query(sql, params);
+
+          return result.error ? { error: result.error } : { data: result.rows };
+        }
+
+        case "PATCH": {
+          const body = await request.json();
+          const where = this.extractWhereParams(queryParams);
+
+          if (Object.keys(where).length === 0) {
+            return {
+              error: { message: "WHERE conditions required for UPDATE" },
+            };
           }
+
+          const { sql, params } = db.buildUpdateQuery(
+            tableName,
+            body,
+            where,
+            queryParams.select
+          );
+          const result = await db.query(sql, params);
+
+          return result.error ? { error: result.error } : { data: result.rows };
         }
 
-        // Add order, limit, offset
-        if (params.order) {
-          const [column, direction] = params.order.split(".");
-          query = query.order(column, { ascending: direction === "asc" });
-        }
+        case "DELETE": {
+          const where = this.extractWhereParams(queryParams);
 
-        if (params.limit) {
-          query = query.limit(parseInt(params.limit));
-        }
-
-        if (params.offset) {
-          query = query.offset(parseInt(params.offset));
-        }
-
-        const { data, error } = await query;
-
-        return { data, error };
-      }
-
-      case "POST": {
-        const body = await request.json();
-        const returning = params.select || null;
-
-        const { data, error } = returning
-          ? await supabase.from(tableName).insert(body).select(returning)
-          : await supabase.from(tableName).insert(body);
-
-        return { data, error };
-      }
-
-      case "PATCH": {
-        const body = await request.json();
-        const returning = params.select || null;
-
-        // Start with query
-        let query = supabase.from(tableName).update(body);
-
-        // Apply filters
-        for (const [key, value] of Object.entries(params)) {
-          if (key !== "select") {
-            const [operator, filterValue] = value.split(".");
-            if (operator && filterValue) {
-              switch (operator) {
-                case "eq":
-                  query = query.eq(key, filterValue);
-                  break;
-                case "neq":
-                  query = query.neq(key, filterValue);
-                  break;
-                // Add other operators as needed
-              }
-            }
+          if (Object.keys(where).length === 0) {
+            return {
+              error: { message: "WHERE conditions required for DELETE" },
+            };
           }
+
+          const { sql, params } = db.buildDeleteQuery(
+            tableName,
+            where,
+            queryParams.select
+          );
+          const result = await db.query(sql, params);
+
+          return result.error ? { error: result.error } : { data: result.rows };
         }
 
-        const { data, error } = returning
-          ? await query.select(returning)
-          : await query;
-
-        return { data, error };
+        default:
+          return { error: { message: "Method not supported" } };
       }
+    } catch (error) {
+      Logger.error("Database operation failed", {
+        table: tableName,
+        method: request.method,
+        error: error.message,
+      });
 
-      case "DELETE": {
-        const returning = params.select || null;
-
-        // Start with query
-        let query = supabase.from(tableName).delete();
-
-        // Apply filters
-        for (const [key, value] of Object.entries(params)) {
-          if (key !== "select") {
-            const [operator, filterValue] = value.split(".");
-            if (operator && filterValue) {
-              switch (operator) {
-                case "eq":
-                  query = query.eq(key, filterValue);
-                  break;
-                case "neq":
-                  query = query.neq(key, filterValue);
-                  break;
-                // Add other operators as needed
-              }
-            }
-          }
-        }
-
-        const { data, error } = returning
-          ? await query.select(returning)
-          : await query;
-
-        return { data, error };
-      }
-
-      default:
-        return { error: { message: "Method not supported" } };
+      return {
+        error: { message: "Database operation failed", code: "DB_ERROR" },
+      };
     }
   },
 
-  // Handle authentication requests
-  async handleAuth(request, env, ctx, pathParts) {
-    const supabase = this.getSupabaseClient(env);
-    const authAction = pathParts[1]; // auth/{action}
+  extractWhereParams(queryParams) {
+    const where = {};
+    const excludeKeys = ["select", "order", "limit", "offset"];
+
+    for (const [key, value] of Object.entries(queryParams)) {
+      if (!excludeKeys.includes(key)) {
+        where[key] = value;
+      }
+    }
+
+    return where;
+  },
+
+  // Handle authentication
+  async handleAuth(request, env, config, pathParts) {
+    const authAction = pathParts[1];
+    const encryption = new Encryption(config.security.encryptionKey);
 
     switch (authAction) {
       case "signup": {
-        // Check for encrypted content type
-        const contentType = request.headers.get("Content-Type") || "";
-        let payload;
-
-        if (contentType.includes("encrypted")) {
-          // Handle encrypted payload
-          const encryptedText = await request.text();
-          payload = Security.decryptPayload(encryptedText, env);
-        } else {
-          // Regular JSON handling
-          payload = await request.json();
-        }
-
-        const { email, password, ...options } = payload;
-
-        // Add security checks for password strength
-        if (password && password.length < 8) {
-          return {
-            error: { message: "Password must be at least 8 characters long" },
-          };
-        }
-
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options,
-        });
-
-        // Log signup attempt for security monitoring
-        await Security.logSecurityEvent(
-          {
-            type: "SIGNUP_ATTEMPT",
-            email,
-            success: !error,
-            error: error ? error.message : null,
-            ip: request.headers.get("CF-Connecting-IP"),
-            timestamp: Date.now(),
-          },
-          env
-        );
-
-        return { data, error };
+        return await this.handleSignup(request, env, config, encryption);
       }
 
       case "signin": {
-        // Check for encrypted content type
-        const contentType = request.headers.get("Content-Type") || "";
-        console.log("Content-Type for signin:", contentType);
-
-        let payload;
-
-        if (contentType.includes("encrypted")) {
-          // Handle encrypted payload
-          console.log("Detected encrypted content type");
-          const encryptedText = await request.text();
-          console.log(
-            "Raw encrypted payload (first 100 chars):",
-            encryptedText.substring(0, 100) + "..."
-          );
-
-          payload = Security.decryptPayload(encryptedText, env);
-          console.log("Decrypted payload:", payload);
-        } else {
-          // Regular JSON handling
-          console.log("Regular JSON content type");
-          payload = await request.json();
-          console.log("JSON payload:", payload);
-        }
-
-        if (!payload || (!payload.email && !payload.phone)) {
-          console.error("Missing required fields in payload");
-          return {
-            error: {
-              message: "Missing email or phone in request payload",
-              code: "validation_failed",
-              details: {
-                payload:
-                  typeof payload === "object"
-                    ? Object.keys(payload)
-                    : typeof payload,
-              },
-            },
-          };
-        }
-
-        if (!payload.password) {
-          console.error("Missing password in payload");
-          return {
-            error: {
-              message: "Missing password in request payload",
-              code: "validation_failed",
-            },
-          };
-        }
-
-        const { email, password, ...options } = payload;
-
-        // Get client IP for security logging
-        const clientIP = request.headers.get("CF-Connecting-IP");
-
-        // Check for brute force attempts using KV
-        const loginAttemptsKey = `login:attempts:${email}`;
-        const loginAttempts = (await env.SAINT_CENTRAL_KV.get(
-          loginAttemptsKey,
-          { type: "json" }
-        )) || { count: 0, lastAttempt: 0 };
-
-        // If too many attempts, block
-        if (
-          loginAttempts.count >= 50 && // switch back to 5 for production
-          Date.now() - loginAttempts.lastAttempt < 15 * 60 * 1000
-        ) {
-          await Security.logSecurityEvent(
-            {
-              type: "LOGIN_BLOCKED_TOO_MANY_ATTEMPTS",
-              email,
-              ip: clientIP,
-              attemptCount: loginAttempts.count,
-              timestamp: Date.now(),
-            },
-            env
-          );
-
-          return {
-            error: {
-              message: "Too many login attempts. Please try again later.",
-            },
-          };
-        }
-
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        // Update login attempts counter
-        if (error) {
-          await env.SAINT_CENTRAL_KV.put(
-            loginAttemptsKey,
-            JSON.stringify({
-              count: loginAttempts.count + 1,
-              lastAttempt: Date.now(),
-            }),
-            { expirationTtl: 60 * 15 }
-          ); // 15 minutes
-        } else {
-          // Reset counter on successful login
-          await env.SAINT_CENTRAL_KV.delete(loginAttemptsKey);
-        }
-
-        // Log login attempt for security monitoring
-        await Security.logSecurityEvent(
-          {
-            type: "LOGIN_ATTEMPT",
-            email,
-            success: !error,
-            error: error ? error.message : null,
-            ip: clientIP,
-            timestamp: Date.now(),
-          },
-          env
-        );
-
-        return { data, error };
+        return await this.handleSignin(request, env, config, encryption);
       }
 
       case "signout": {
-        const { data, error } = await supabase.auth.signOut();
-        return { data, error };
-      }
-
-      case "recover": {
-        const { email } = await request.json();
-
-        const { data, error } = await supabase.auth.resetPasswordForEmail(
-          email
-        );
-
-        // Log password reset request for security monitoring
-        await Security.logSecurityEvent(
-          {
-            type: "PASSWORD_RESET_REQUEST",
-            email,
-            success: !error,
-            ip: request.headers.get("CF-Connecting-IP"),
-            timestamp: Date.now(),
-          },
-          env
-        );
-
-        return { data, error };
+        return await this.handleSignout(request, env, config);
       }
 
       case "session": {
-        // Get session from JWT token
-        const authHeader = request.headers.get("Authorization");
-        const token = authHeader ? authHeader.replace("Bearer ", "") : null;
+        return await this.handleSession(request, env, config);
+      }
 
-        if (!token) {
-          return { error: { message: "No session found" } };
-        }
-
-        // Verify and enhance the JWT token
-        const payload = await Security.verifyJWT(token, env);
-
-        if (!payload) {
-          return { error: { message: "Invalid session" } };
-        }
-
-        // Get session from supabase
-        const { data, error } = await supabase.auth.getUser(token);
-
-        // Add security info to session data
-        if (data) {
-          data.security = {
-            lastVerified: Date.now(),
-            clientIP: request.headers.get("CF-Connecting-IP"),
-            userAgent: request.headers.get("User-Agent"),
-          };
-        }
-
-        return { data, error };
+      case "recover": {
+        return await this.handlePasswordRecovery(request, env, config);
       }
 
       case "token": {
-        // Token refresh logic
-        const { refresh_token } = await request.json();
-
-        const { data, error } = await supabase.auth.refreshSession({
-          refresh_token,
-        });
-
-        // Log token refresh for security monitoring
-        await Security.logSecurityEvent(
-          {
-            type: "TOKEN_REFRESH",
-            success: !error,
-            ip: request.headers.get("CF-Connecting-IP"),
-            timestamp: Date.now(),
-          },
-          env
-        );
-
-        return { data, error };
-      }
-
-      case "authorize": {
-        // OAuth flow
-        const { provider, ...options } = await request.json();
-
-        const { data, error } = await supabase.auth.signInWithOAuth({
-          provider,
-          options,
-        });
-
-        return { data, error };
-      }
-
-      case "mfa": {
-        // MFA handling - this is a Saint Central enhancement
-        const mfaAction = pathParts[2]; // auth/mfa/{action}
-
-        switch (mfaAction) {
-          case "enable": {
-            // In a real implementation, this would integrate with Supabase's MFA
-            // For now, we'll mock the response
-            return {
-              data: {
-                mfa_enabled: true,
-                setup_required: true,
-                secret: "ABCDEFGHIJKLMNOP", // Secret for TOTP
-                qr_code: "data:image/png;base64,iVBORw0KG...",
-              },
-            };
-          }
-
-          case "verify": {
-            const { code } = await request.json();
-
-            // Mock verification
-            const isValid = code === "123456"; // In real implementation, validate TOTP
-
-            if (!isValid) {
-              return { error: { message: "Invalid MFA code" } };
-            }
-
-            return {
-              data: {
-                mfa_verified: true,
-                recovery_codes: [
-                  "AAAA-BBBB-CCCC",
-                  "DDDD-EEEE-FFFF",
-                  "GGGG-HHHH-IIII",
-                ],
-              },
-            };
-          }
-
-          case "disable": {
-            // Mock disabling MFA
-            return {
-              data: {
-                mfa_enabled: false,
-              },
-            };
-          }
-
-          default:
-            return { error: { message: "MFA action not supported" } };
-        }
-      }
-
-      case "admin": {
-        // Admin functions
-        const adminAction = pathParts[2]; // auth/admin/{action}
-
-        // Verify admin privileges
-        const authHeader = request.headers.get("Authorization");
-        const token = authHeader ? authHeader.replace("Bearer ", "") : null;
-
-        if (!token) {
-          return { error: { message: "Unauthorized" } };
-        }
-
-        const { data: userData } = await supabase.auth.getUser(token);
-
-        // Check if user has admin role - implementation varies based on your Supabase setup
-        // This is a simplistic check - you should implement proper role-based checks
-        const isAdmin = userData?.user?.app_metadata?.role === "admin";
-
-        if (!isAdmin) {
-          // Log unauthorized admin access attempt
-          await Security.logSecurityEvent(
-            {
-              type: "UNAUTHORIZED_ADMIN_ACCESS",
-              user: userData?.user?.id,
-              ip: request.headers.get("CF-Connecting-IP"),
-              action: adminAction,
-              timestamp: Date.now(),
-            },
-            env
-          );
-
-          return { error: { message: "Unauthorized" } };
-        }
-
-        switch (adminAction) {
-          case "users": {
-            if (request.method === "GET") {
-              // List users
-              const url = new URL(request.url);
-              const page = parseInt(url.searchParams.get("page") || "1");
-              const perPage = parseInt(
-                url.searchParams.get("per_page") || "50"
-              );
-
-              // Fetch users via Supabase Admin API
-              // This is a simplified version - actual implementation would use admin endpoints
-              const { data, error } = await supabase
-                .from("auth.users")
-                .select("*")
-                .range((page - 1) * perPage, page * perPage - 1);
-
-              return { data, error };
-            } else if (request.method === "POST") {
-              // Create user
-              const userData = await request.json();
-
-              const { data, error } = await supabase.auth.admin.createUser({
-                email: userData.email,
-                password: userData.password,
-                email_confirm: true,
-                user_metadata: userData.user_metadata,
-              });
-
-              return { data, error };
-            }
-            break;
-          }
-
-          // Fixed: Removed the duplicate case for "users"
-          case "user-delete": {
-            if (pathParts.length > 3 && request.method === "DELETE") {
-              // Delete user
-              const userId = pathParts[3];
-
-              const { data, error } = await supabase.auth.admin.deleteUser(
-                userId
-              );
-
-              return { data, error };
-            }
-            break;
-          }
-        }
-
-        return { error: { message: "Admin action not supported" } };
+        return await this.handleTokenRefresh(request, env, config);
       }
 
       default:
@@ -868,447 +1173,824 @@ const Handlers = {
     }
   },
 
-  // Handle storage requests
-  async handleStorage(request, env, ctx, pathParts) {
-    const supabase = this.getSupabaseClient(env);
-    const storageAction = pathParts[1]; // storage/{action}
+  async handleSignup(request, env, config, encryption) {
+    try {
+      const contentType = request.headers.get("Content-Type") || "";
+      let payload;
 
-    switch (storageAction) {
-      case "bucket": {
-        // Bucket operations
-        if (pathParts.length === 2) {
-          if (request.method === "GET") {
-            // List buckets
-            const { data, error } = await supabase.storage.listBuckets();
-            return { data, error };
-          } else if (request.method === "POST") {
-            // Create bucket
-            const { id, public: isPublic } = await request.json();
-
-            const { data, error } = await supabase.storage.createBucket(id, {
-              public: isPublic,
-            });
-
-            return { data, error };
-          }
-        } else if (pathParts.length === 3) {
-          // Operations on specific bucket
-          const bucketName = pathParts[2];
-
-          if (request.method === "DELETE") {
-            // Delete bucket
-            const { data, error } = await supabase.storage.deleteBucket(
-              bucketName
-            );
-            return { data, error };
-          }
-        }
-        break;
+      if (contentType.includes("encrypted")) {
+        const encryptedText = await request.text();
+        const encryptedData = JSON.parse(encryptedText);
+        payload = await encryption.decrypt(encryptedData);
+      } else {
+        payload = await request.json();
       }
 
-      case "object": {
-        // Object operations
-        if (pathParts[2] === "list" && pathParts.length > 3) {
-          // List objects in bucket
-          const bucketName = pathParts[3];
-          const url = new URL(request.url);
-          const prefix = url.searchParams.get("prefix") || "";
-          const limit = url.searchParams.get("limit")
-            ? parseInt(url.searchParams.get("limit"))
-            : undefined;
-          const offset = url.searchParams.get("offset")
-            ? parseInt(url.searchParams.get("offset"))
-            : undefined;
+      // Validate input
+      if (!payload.email || !Validator.email(payload.email)) {
+        return { error: { message: "Valid email required" } };
+      }
 
-          const { data, error } = await supabase.storage
-            .from(bucketName)
-            .list(prefix, { limit, offset });
+      const passwordValidation = Validator.password(
+        payload.password,
+        config.security.passwordMinLength
+      );
+      if (!passwordValidation.valid) {
+        return { error: { message: passwordValidation.message } };
+      }
 
-          return { data, error };
-        } else if (pathParts.length > 3) {
-          // Operations on specific object
-          const bucketName = pathParts[2];
+      // Call Supabase Auth API
+      const response = await fetch(`${config.supabase.url}/auth/v1/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.supabase.serviceKey}`,
+          apikey: config.supabase.serviceKey,
+        },
+        body: JSON.stringify({
+          email: payload.email,
+          password: payload.password,
+          data: payload.metadata || {},
+        }),
+      });
 
-          // Combine remaining path parts to get the full file path
-          const filePath = pathParts.slice(3).join("/");
+      const result = await response.json();
 
-          if (request.method === "GET") {
-            // Download file
-            const { data, error } = await supabase.storage
-              .from(bucketName)
-              .download(filePath);
+      await Security.logSecurityEvent(
+        {
+          type: "SIGNUP_ATTEMPT",
+          email: payload.email,
+          success: response.ok,
+          ip: request.headers.get("CF-Connecting-IP"),
+        },
+        env
+      );
 
-            return { data, error };
-          } else if (request.method === "POST") {
-            // Upload file - handle form data
-            const formData = await request.formData();
-            const file = formData.get("file");
+      if (!response.ok) {
+        return { error: result };
+      }
 
-            if (!file) {
-              return { error: { message: "No file provided" } };
-            }
+      return { data: result };
+    } catch (error) {
+      Logger.error("Signup failed", { error: error.message });
+      return { error: { message: "Signup failed" } };
+    }
+  },
 
-            // Convert File or Blob to ArrayBuffer for Supabase
-            const arrayBuffer = await file.arrayBuffer();
+  async handleSignin(request, env, config, encryption) {
+    try {
+      const contentType = request.headers.get("Content-Type") || "";
+      let payload;
 
-            // Get optional content type
-            const contentType = formData.get("content_type") || file.type;
+      if (contentType.includes("encrypted")) {
+        const encryptedText = await request.text();
+        const encryptedData = JSON.parse(encryptedText);
+        payload = await encryption.decrypt(encryptedData);
+      } else {
+        payload = await request.json();
+      }
 
-            // Scan file for malware (simplified placeholder)
-            const isSafe = await scanFileForMalware(arrayBuffer);
+      // Validate input
+      if (!payload.email || !Validator.email(payload.email)) {
+        return { error: { message: "Valid email required" } };
+      }
 
-            if (!isSafe) {
-              // Log security event for malware detection
-              await Security.logSecurityEvent(
-                {
-                  type: "MALWARE_DETECTED",
-                  bucket: bucketName,
-                  path: filePath,
-                  contentType,
-                  size: arrayBuffer.byteLength,
-                  ip: request.headers.get("CF-Connecting-IP"),
-                  timestamp: Date.now(),
-                },
-                env
-              );
+      if (!payload.password) {
+        return { error: { message: "Password required" } };
+      }
 
-              return {
-                error: { message: "File rejected for security reasons" },
-              };
-            }
+      // Check for brute force
+      const bruteForceCheck = await Security.checkBruteForce(
+        payload.email,
+        env,
+        config
+      );
+      if (bruteForceCheck.blocked) {
+        await Security.logSecurityEvent(
+          {
+            type: "BRUTE_FORCE_BLOCKED",
+            email: payload.email,
+            ip: request.headers.get("CF-Connecting-IP"),
+            remainingTime: bruteForceCheck.remainingTime,
+          },
+          env
+        );
 
-            const { data, error } = await supabase.storage
-              .from(bucketName)
-              .upload(filePath, arrayBuffer, {
-                contentType,
-                upsert: true,
-              });
+        return {
+          error: {
+            message: "Too many failed attempts. Please try again later.",
+            code: "RATE_LIMITED",
+          },
+        };
+      }
 
-            return { data, error };
-          } else if (request.method === "DELETE") {
-            // Delete file
-            const { data, error } = await supabase.storage
-              .from(bucketName)
-              .remove([filePath]);
-
-            return { data, error };
-          }
-        } else if (request.method === "DELETE") {
-          // Bulk delete operation
-          const bucketName = pathParts[2];
-          const { prefixes } = await request.json();
-
-          const { data, error } = await supabase.storage
-            .from(bucketName)
-            .remove(prefixes);
-
-          return { data, error };
+      // Call Supabase Auth API
+      const response = await fetch(
+        `${config.supabase.url}/auth/v1/token?grant_type=password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.supabase.serviceKey}`,
+            apikey: config.supabase.serviceKey,
+          },
+          body: JSON.stringify({
+            email: payload.email,
+            password: payload.password,
+          }),
         }
-        break;
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        await Security.recordFailedLogin(payload.email, env, config);
+        await Security.logSecurityEvent(
+          {
+            type: "LOGIN_FAILED",
+            email: payload.email,
+            ip: request.headers.get("CF-Connecting-IP"),
+            error: result.error_description,
+          },
+          env
+        );
+
+        return { error: result };
+      }
+
+      // Clear failed login attempts on success
+      await Security.clearFailedLogins(payload.email, env);
+
+      await Security.logSecurityEvent(
+        {
+          type: "LOGIN_SUCCESS",
+          email: payload.email,
+          ip: request.headers.get("CF-Connecting-IP"),
+        },
+        env
+      );
+
+      return { data: result };
+    } catch (error) {
+      Logger.error("Signin failed", { error: error.message });
+      return { error: { message: "Signin failed" } };
+    }
+  },
+
+  async handleSignout(request, env, config) {
+    try {
+      const authHeader = request.headers.get("Authorization");
+      const token = authHeader ? authHeader.replace("Bearer ", "") : null;
+
+      if (!token) {
+        return { error: { message: "No token provided" } };
+      }
+
+      const response = await fetch(`${config.supabase.url}/auth/v1/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: config.supabase.serviceKey,
+        },
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        return { error: result };
+      }
+
+      return { data: { message: "Signed out successfully" } };
+    } catch (error) {
+      Logger.error("Signout failed", { error: error.message });
+      return { error: { message: "Signout failed" } };
+    }
+  },
+
+  async handleSession(request, env, config) {
+    try {
+      const authHeader = request.headers.get("Authorization");
+      const token = authHeader ? authHeader.replace("Bearer ", "") : null;
+
+      if (!token) {
+        return { error: { message: "No session found" } };
+      }
+
+      const jwt = new JWT(config.security.jwtSecret);
+      const payload = await jwt.verify(token);
+
+      if (!payload) {
+        return { error: { message: "Invalid session" } };
+      }
+
+      const response = await fetch(`${config.supabase.url}/auth/v1/user`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          apikey: config.supabase.serviceKey,
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        return { error: result };
+      }
+
+      // Add security metadata
+      result.security = {
+        lastVerified: Date.now(),
+        clientIP: request.headers.get("CF-Connecting-IP"),
+        userAgent: request.headers.get("User-Agent"),
+        sessionId: crypto.randomUUID(),
+      };
+
+      return { data: result };
+    } catch (error) {
+      Logger.error("Session validation failed", { error: error.message });
+      return { error: { message: "Session validation failed" } };
+    }
+  },
+
+  async handlePasswordRecovery(request, env, config) {
+    try {
+      const { email } = await request.json();
+
+      if (!email || !Validator.email(email)) {
+        return { error: { message: "Valid email required" } };
+      }
+
+      const response = await fetch(`${config.supabase.url}/auth/v1/recover`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.supabase.serviceKey}`,
+          apikey: config.supabase.serviceKey,
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const result = await response.json();
+
+      await Security.logSecurityEvent(
+        {
+          type: "PASSWORD_RECOVERY_REQUEST",
+          email,
+          success: response.ok,
+          ip: request.headers.get("CF-Connecting-IP"),
+        },
+        env
+      );
+
+      if (!response.ok) {
+        return { error: result };
+      }
+
+      return { data: result };
+    } catch (error) {
+      Logger.error("Password recovery failed", { error: error.message });
+      return { error: { message: "Password recovery failed" } };
+    }
+  },
+
+  async handleTokenRefresh(request, env, config) {
+    try {
+      const { refresh_token } = await request.json();
+
+      if (!refresh_token) {
+        return { error: { message: "Refresh token required" } };
+      }
+
+      const response = await fetch(
+        `${config.supabase.url}/auth/v1/token?grant_type=refresh_token`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.supabase.serviceKey}`,
+            apikey: config.supabase.serviceKey,
+          },
+          body: JSON.stringify({ refresh_token }),
+        }
+      );
+
+      const result = await response.json();
+
+      await Security.logSecurityEvent(
+        {
+          type: "TOKEN_REFRESH",
+          success: response.ok,
+          ip: request.headers.get("CF-Connecting-IP"),
+        },
+        env
+      );
+
+      if (!response.ok) {
+        return { error: result };
+      }
+
+      return { data: result };
+    } catch (error) {
+      Logger.error("Token refresh failed", { error: error.message });
+      return { error: { message: "Token refresh failed" } };
+    }
+  },
+
+  // Handle storage operations
+  async handleStorage(request, env, config, pathParts) {
+    const storageAction = pathParts[1];
+
+    try {
+      switch (storageAction) {
+        case "bucket":
+          return await this.handleBucketOperations(
+            request,
+            env,
+            config,
+            pathParts
+          );
+        case "object":
+          return await this.handleObjectOperations(
+            request,
+            env,
+            config,
+            pathParts
+          );
+        default:
+          return { error: { message: "Storage action not supported" } };
+      }
+    } catch (error) {
+      Logger.error("Storage operation failed", { error: error.message });
+      return { error: { message: "Storage operation failed" } };
+    }
+  },
+
+  async handleBucketOperations(request, env, config, pathParts) {
+    const baseUrl = `${config.supabase.url}/storage/v1/bucket`;
+    const headers = {
+      Authorization: `Bearer ${config.supabase.serviceKey}`,
+      apikey: config.supabase.serviceKey,
+    };
+
+    if (pathParts.length === 2) {
+      if (request.method === "GET") {
+        const response = await fetch(baseUrl, { method: "GET", headers });
+        const result = await response.json();
+        return response.ok ? { data: result } : { error: result };
+      } else if (request.method === "POST") {
+        const { id, public: isPublic } = await request.json();
+        const response = await fetch(baseUrl, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({ id, public: isPublic }),
+        });
+        const result = await response.json();
+        return response.ok ? { data: result } : { error: result };
+      }
+    } else if (pathParts.length === 3) {
+      const bucketName = pathParts[2];
+      if (request.method === "DELETE") {
+        const response = await fetch(`${baseUrl}/${bucketName}`, {
+          method: "DELETE",
+          headers,
+        });
+        const result = await response.json();
+        return response.ok ? { data: result } : { error: result };
+      }
+    }
+
+    return { error: { message: "Bucket operation not supported" } };
+  },
+
+  async handleObjectOperations(request, env, config, pathParts) {
+    if (pathParts[2] === "list" && pathParts.length > 3) {
+      return await this.handleListObjects(request, env, config, pathParts);
+    } else if (pathParts.length > 3) {
+      return await this.handleFileOperations(request, env, config, pathParts);
+    }
+
+    return { error: { message: "Object operation not supported" } };
+  },
+
+  async handleListObjects(request, env, config, pathParts) {
+    const bucketName = pathParts[3];
+    const url = new URL(request.url);
+    const prefix = url.searchParams.get("prefix") || "";
+    const limit = url.searchParams.get("limit") || "100";
+    const offset = url.searchParams.get("offset") || "0";
+
+    const response = await fetch(
+      `${config.supabase.url}/storage/v1/object/list/${bucketName}?prefix=${prefix}&limit=${limit}&offset=${offset}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.supabase.serviceKey}`,
+          apikey: config.supabase.serviceKey,
+        },
+      }
+    );
+
+    const result = await response.json();
+    return response.ok ? { data: result } : { error: result };
+  },
+
+  async handleFileOperations(request, env, config, pathParts) {
+    const bucketName = pathParts[2];
+    const filePath = pathParts.slice(3).join("/");
+    const baseUrl = `${config.supabase.url}/storage/v1/object/${bucketName}/${filePath}`;
+
+    const headers = {
+      Authorization: `Bearer ${config.supabase.serviceKey}`,
+      apikey: config.supabase.serviceKey,
+    };
+
+    switch (request.method) {
+      case "GET": {
+        const response = await fetch(baseUrl, { method: "GET", headers });
+        if (!response.ok) {
+          const result = await response.json();
+          return { error: result };
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        return { data: arrayBuffer };
+      }
+
+      case "POST": {
+        const formData = await request.formData();
+        const file = formData.get("file");
+
+        if (!file) {
+          return { error: { message: "No file provided" } };
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Enhanced malware scanning
+        const scanResult = await scanFileForMalware(arrayBuffer, file.name);
+        if (!scanResult.safe) {
+          await Security.logSecurityEvent(
+            {
+              type: "MALWARE_DETECTED",
+              bucket: bucketName,
+              path: filePath,
+              threats: scanResult.threats,
+              contentType: file.type,
+              size: arrayBuffer.byteLength,
+              ip: request.headers.get("CF-Connecting-IP"),
+            },
+            env
+          );
+
+          return {
+            error: {
+              message: "File rejected for security reasons",
+              threats: scanResult.threats,
+            },
+          };
+        }
+
+        const uploadFormData = new FormData();
+        uploadFormData.append(
+          "file",
+          new Blob([arrayBuffer], { type: file.type })
+        );
+
+        const response = await fetch(baseUrl, {
+          method: "POST",
+          headers,
+          body: uploadFormData,
+        });
+
+        const result = await response.json();
+        return response.ok ? { data: result } : { error: result };
+      }
+
+      case "DELETE": {
+        const response = await fetch(baseUrl, { method: "DELETE", headers });
+        const result = await response.json();
+        return response.ok ? { data: result } : { error: result };
       }
 
       default:
-        return { error: { message: "Storage action not supported" } };
+        return { error: { message: "File operation not supported" } };
     }
-
-    return { error: { message: "Storage operation not supported" } };
   },
 
-  // Handle Functions/RPC requests
-  async handleFunctions(request, env, ctx, pathParts) {
-    const supabase = this.getSupabaseClient(env);
-
+  // Handle functions and RPC
+  async handleFunctions(request, env, config, pathParts) {
     if (
       pathParts[0] === "functions" &&
       pathParts[1] === "v1" &&
       pathParts.length > 2
     ) {
-      // Edge Functions
-      const functionName = pathParts[2];
-
-      // Prepare the payload
-      const payload = await request.json();
-
-      // Log function invocation for monitoring
-      const requestId = Security.generateRequestId();
-      console.log(`Function invoke: ${functionName} [${requestId}]`);
-
-      try {
-        const { data, error } = await supabase.functions.invoke(functionName, {
-          body: payload,
-        });
-
-        return { data, error };
-      } catch (error) {
-        console.error(`Function error [${requestId}]:`, error);
-        return {
-          error: {
-            message: "Function invocation failed",
-            original: error.message,
-          },
-        };
-      }
+      return await this.handleEdgeFunction(request, env, config, pathParts);
     } else if (
       pathParts[0] === "rest" &&
-      pathParts[1] === "v1" &&
       pathParts[2] === "rpc" &&
       pathParts.length > 3
     ) {
-      // Database RPC function
-      const functionName = pathParts[3];
-
-      // Prepare the payload
-      const payload = await request.json();
-
-      try {
-        const { data, error } = await supabase.rpc(functionName, payload);
-        return { data, error };
-      } catch (error) {
-        return {
-          error: {
-            message: "RPC function call failed",
-            original: error.message,
-          },
-        };
-      }
+      return await this.handleRPCFunction(request, env, config, pathParts);
     }
 
-    return { error: { message: "Function/RPC not supported" } };
+    return { error: { message: "Function not supported" } };
+  },
+
+  async handleEdgeFunction(request, env, config, pathParts) {
+    const functionName = pathParts[2];
+    const payload = await request.json();
+    const requestId = Security.generateRequestId();
+
+    Logger.info("Edge Function Invocation", { functionName, requestId });
+
+    try {
+      const response = await fetch(
+        `${config.supabase.url}/functions/v1/${functionName}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${config.supabase.serviceKey}`,
+            apikey: config.supabase.serviceKey,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const result = await response.json();
+      return response.ok ? { data: result } : { error: result };
+    } catch (error) {
+      Logger.error("Edge Function Error", {
+        functionName,
+        requestId,
+        error: error.message,
+      });
+      return { error: { message: "Function invocation failed" } };
+    }
+  },
+
+  async handleRPCFunction(request, env, config, pathParts) {
+    const functionName = pathParts[3];
+    const payload = await request.json();
+    const db = this.getDatabase(config);
+
+    try {
+      // Validate function name
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(functionName)) {
+        return { error: { message: "Invalid function name" } };
+      }
+
+      const paramNames = Object.keys(payload);
+      const paramValues = Object.values(payload);
+      const paramPlaceholders = paramValues
+        .map((_, i) => `$${i + 1}`)
+        .join(", ");
+
+      const sql = `SELECT * FROM ${functionName}(${paramPlaceholders})`;
+      const result = await db.query(sql, paramValues);
+
+      return result.error ? { error: result.error } : { data: result.rows };
+    } catch (error) {
+      Logger.error("RPC Function Error", {
+        functionName,
+        error: error.message,
+      });
+      return { error: { message: "RPC function call failed" } };
+    }
   },
 };
 
-/**
- * Simplified file scanner (placeholder)
- * In a real implementation, this would integrate with
- * virus scanning services or AI-based malware detection
- */
-async function scanFileForMalware(fileData) {
-  // Placeholder for actual file scanning logic
-  // This would normally call a virus scanning service or implement checks
-
-  // For now, just do a basic check for executable files
-  const header = new Uint8Array(fileData.slice(0, 4));
-
-  // Check for common executable headers (simplified)
-  const isMZHeader = header[0] === 77 && header[1] === 90; // MZ header for Windows executables
-  const isELFHeader =
-    header[0] === 127 &&
-    header[1] === 69 &&
-    header[2] === 76 &&
-    header[3] === 70; // ELF header for Linux executables
-
-  // Reject executables
-  if (isMZHeader || isELFHeader) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Main worker fetch handler
- */
+// Main worker
 export default {
   async fetch(request, env, ctx) {
-    // Request ID for tracing
-    const requestId = Security.generateRequestId();
     const startTime = Date.now();
-
-    // Add basic security headers to all responses
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers":
-        "Content-Type, Authorization, X-Security-Nonce, X-Request-ID, X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Strict-Transport-Security",
-      "X-Request-ID": requestId,
-    };
-
-    // Handle OPTIONS request for CORS
-    if (request.method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders,
-      });
-    }
-
-    // Security check: validate client IP and headers
-    const securityCheck = Security.checkSecurityHeaders(request);
-
-    if (!securityCheck.allowed) {
-      await Security.logSecurityEvent(
-        {
-          type: "SECURITY_BLOCK",
-          reason: securityCheck.reason,
-          ip: request.headers.get("CF-Connecting-IP"),
-          headers: Object.fromEntries(request.headers),
-          requestId,
-          timestamp: Date.now(),
-        },
-        env
-      );
-
-      return new Response(
-        JSON.stringify({
-          error: "Request blocked for security reasons",
-          code: securityCheck.reason,
-        }),
-        {
-          status: 403,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    // Rate limiting
-    const isRateLimited = !(await Security.rateLimit(request, env, ctx));
-
-    if (isRateLimited) {
-      await Security.logSecurityEvent(
-        {
-          type: "RATE_LIMIT_EXCEEDED",
-          ip: request.headers.get("CF-Connecting-IP"),
-          path: new URL(request.url).pathname,
-          requestId,
-          timestamp: Date.now(),
-        },
-        env
-      );
-
-      return new Response(
-        JSON.stringify({
-          error: "Too many requests",
-          code: "RATE_LIMIT_EXCEEDED",
-        }),
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-            "Retry-After": "60",
-          },
-        }
-      );
-    }
+    let config;
 
     try {
-      // Parse URL and path
-      const url = new URL(request.url);
-      const path = url.pathname;
-      const pathParts = path.split("/").filter(Boolean);
+      // Initialize configuration
+      config = new Config(env);
+      Logger.setLevel(config.monitoring.logLevel);
 
+      // Generate request ID for tracing
+      const requestId = Security.generateRequestId();
+
+      // Basic CORS and security headers
+      const corsHeaders = {
+        "Access-Control-Allow-Origin": config.cors.allowedOrigins.includes("*")
+          ? "*"
+          : config.cors.allowedOrigins.join(", "),
+        "Access-Control-Allow-Methods": config.cors.allowedMethods.join(", "),
+        "Access-Control-Allow-Headers": config.cors.allowedHeaders.join(", "),
+        "X-Request-ID": requestId,
+        "X-Saint-Central-Version": "2.0.0",
+        ...Security.generateSecureHeaders(),
+      };
+
+      // Handle OPTIONS requests
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: corsHeaders });
+      }
+
+      // Security checks
+      const securityCheck = Security.checkSecurityHeaders(request);
+      if (!securityCheck.allowed) {
+        await Security.logSecurityEvent(
+          {
+            type: "SECURITY_BLOCK",
+            reason: securityCheck.reason,
+            ip: request.headers.get("CF-Connecting-IP"),
+            requestId,
+          },
+          env
+        );
+
+        return new Response(
+          JSON.stringify({
+            error: "Request blocked for security reasons",
+            code: securityCheck.reason,
+            requestId,
+          }),
+          {
+            status: 403,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // Rate limiting
+      const rateLimitResult = await Security.rateLimit(request, env, config);
+      if (!rateLimitResult.allowed) {
+        await Security.logSecurityEvent(
+          {
+            type: "RATE_LIMIT_EXCEEDED",
+            ip: request.headers.get("CF-Connecting-IP"),
+            path: new URL(request.url).pathname,
+            requestId,
+          },
+          env
+        );
+
+        const rateLimitHeaders = {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          "X-RateLimit-Limit": rateLimitResult.limit?.toString() || "0",
+          "X-RateLimit-Remaining": "0",
+          "X-RateLimit-Reset": new Date(
+            rateLimitResult.resetAt || Date.now() + 60000
+          ).toISOString(),
+          "Retry-After": "60",
+        };
+
+        return new Response(
+          JSON.stringify({
+            error: "Too many requests",
+            code: "RATE_LIMITED",
+            requestId,
+            resetAt: rateLimitResult.resetAt,
+          }),
+          { status: 429, headers: rateLimitHeaders }
+        );
+      }
+
+      // Parse request
+      const url = new URL(request.url);
+      const pathParts = url.pathname.split("/").filter(Boolean);
+
+      Logger.info("Request Received", {
+        requestId,
+        method: request.method,
+        path: url.pathname,
+        ip: request.headers.get("CF-Connecting-IP"),
+        userAgent: request.headers.get("User-Agent"),
+      });
+
+      // Health check
       if (pathParts.length === 0) {
+        const db = Handlers.getDatabase(config);
+        const stats = db.getStats();
+
         return new Response(
           JSON.stringify({
             name: "Saint Central API",
-            version: "1.0.0",
+            version: "2.0.0",
             status: "operational",
+            timestamp: new Date().toISOString(),
+            requestId,
+            stats: config.monitoring.enableMetrics ? stats : undefined,
           }),
           {
             status: 200,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
           }
         );
       }
 
-      // Route request to appropriate handler
+      // Route requests
       let result;
 
       if (pathParts[0] === "rest" && pathParts[1] === "v1") {
-        // Database operations
-        result = await Handlers.handleDatabase(request, env, ctx, pathParts);
+        result = await Handlers.handleDatabase(request, env, config, pathParts);
       } else if (pathParts[0] === "auth") {
-        // Auth operations
-        result = await Handlers.handleAuth(request, env, ctx, pathParts);
+        result = await Handlers.handleAuth(request, env, config, pathParts);
       } else if (pathParts[0] === "storage") {
-        // Storage operations
-        result = await Handlers.handleStorage(request, env, ctx, pathParts);
+        result = await Handlers.handleStorage(request, env, config, pathParts);
       } else if (
         pathParts[0] === "functions" ||
-        (pathParts[0] === "rest" &&
-          pathParts[1] === "v1" &&
-          pathParts[2] === "rpc")
+        (pathParts[0] === "rest" && pathParts[2] === "rpc")
       ) {
-        // Functions/RPC operations
-        result = await Handlers.handleFunctions(request, env, ctx, pathParts);
+        result = await Handlers.handleFunctions(
+          request,
+          env,
+          config,
+          pathParts
+        );
       } else {
-        result = { error: { message: "Endpoint not found" } };
+        result = {
+          error: { message: "Endpoint not found", code: "NOT_FOUND" },
+        };
       }
 
-      // Log execution time for performance monitoring
+      // Log response
       const duration = Date.now() - startTime;
-      console.log(`Request ${requestId} completed in ${duration}ms`);
+      Logger.info("Request Completed", {
+        requestId,
+        duration,
+        success: !result.error,
+        statusCode: result.error ? 400 : 200,
+      });
 
-      // Apply security enhancements to the response
+      // Add rate limit headers to successful responses
+      const responseHeaders = {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
+        "X-Response-Time": `${duration}ms`,
+      };
+
+      if (rateLimitResult.limit) {
+        responseHeaders["X-RateLimit-Limit"] = rateLimitResult.limit.toString();
+        responseHeaders["X-RateLimit-Remaining"] =
+          rateLimitResult.remaining?.toString() || "0";
+        responseHeaders["X-RateLimit-Reset"] = new Date(
+          rateLimitResult.resetAt || Date.now() + 60000
+        ).toISOString();
+      }
+
+      // Return response
       if (result.error) {
-        // Sanitize error messages to prevent information disclosure
         const safeError = {
           message: result.error.message,
           code: result.error.code || "ERROR",
+          requestId,
         };
 
-        return Security.enforceCSP(
-          new Response(JSON.stringify({ error: safeError }), {
-            status: 400,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
-          })
-        );
+        return new Response(JSON.stringify({ error: safeError }), {
+          status: 400,
+          headers: responseHeaders,
+        });
       } else {
-        // Encrypt sensitive data in the response if needed
-        const responseData = result.data ? result.data : result;
-
-        return Security.enforceCSP(
-          new Response(JSON.stringify({ data: responseData }), {
-            status: 200,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-              "Cache-Control": "private, no-cache, no-store, must-revalidate",
-            },
-          })
-        );
+        return new Response(JSON.stringify({ data: result.data, requestId }), {
+          status: 200,
+          headers: responseHeaders,
+        });
       }
     } catch (error) {
-      // Log the error for monitoring
-      console.error(`Error processing request ${requestId}:`, error);
+      const requestId = Security.generateRequestId();
+      const duration = Date.now() - startTime;
 
-      await Security.logSecurityEvent(
-        {
-          type: "SERVER_ERROR",
-          error: error.message,
-          stack: error.stack,
-          requestId,
-          timestamp: Date.now(),
-        },
-        env
-      );
+      Logger.error("Unhandled Error", {
+        requestId,
+        error: error.message,
+        stack: error.stack,
+        duration,
+      });
 
-      // Return a sanitized error response
-      return Security.enforceCSP(
-        new Response(
-          JSON.stringify({
-            error: {
-              message: "An unexpected error occurred",
-              code: "SERVER_ERROR",
-              id: requestId,
-            },
-          }),
+      if (config) {
+        await Security.logSecurityEvent(
           {
-            status: 500,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
-          }
-        )
+            type: "SERVER_ERROR",
+            error: error.message,
+            requestId,
+          },
+          env
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: {
+            message: "An unexpected error occurred",
+            code: "SERVER_ERROR",
+            requestId,
+          },
+        }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            "X-Request-ID": requestId,
+            ...Security.generateSecureHeaders(),
+          },
+        }
       );
     }
   },

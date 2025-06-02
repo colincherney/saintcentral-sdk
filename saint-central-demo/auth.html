@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Basic Auth Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      h3 {
+        color: #555;
+        margin-bottom: 10px;
+        margin-top: 15px;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #555;
+      }
+
+      input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+
+      button {
+        background: #007bff;
+        color: white;
+        padding: 12px 18px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        margin-top: 10px;
+      }
+
+      .debug-section {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+      }
+
+      .debug-section h3 {
+        color: #666;
+        margin-bottom: 10px;
+      }
+
+      .debug-btn {
+        background: #28a745;
+      }
+
+      .debug-btn:hover {
+        background: #218838;
+      }
+
+      button:hover {
+        background: #0056b3;
+      }
+
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 4px;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+
+      .success {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+      }
+
+      .error {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+      }
+
+      .info {
+        background: #d1ecf1;
+        border: 1px solid #bee5eb;
+        color: #0c5460;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🔐 Basic Auth Test</h1>
+
+      <div class="form-group">
+        <label for="serverUrl">Server URL:</label>
+        <input
+          type="text"
+          id="serverUrl"
+          value="saint-central-api.colinmcherney.workers.dev"
+          placeholder="your-worker.workers.dev"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email:</label>
+        <input
+          type="email"
+          id="email"
+          value="test@example.com"
+          placeholder="test@example.com"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password:</label>
+        <input
+          type="password"
+          id="password"
+          value="TestPassword123!"
+          placeholder="Enter password"
+        />
+      </div>
+
+      <div class="debug-section">
+        <h3>🔍 Debug Tests</h3>
+        <button class="debug-btn" onclick="testServer()">Test Server</button>
+        <button class="debug-btn" onclick="testDirectSignIn()">
+          Direct Sign In
+        </button>
+        <button class="debug-btn" onclick="testWithEncryption()">
+          Test Encryption
+        </button>
+        <button class="debug-btn" onclick="compareRequests()">
+          Compare Requests
+        </button>
+      </div>
+
+      <h3>🔐 Auth Tests</h3>
+      <button onclick="testSignUp()">Sign Up</button>
+      <button onclick="testSignIn()">Sign In</button>
+      <button onclick="testSignOut()">Sign Out</button>
+      <button onclick="getSession()">Get Session</button>
+
+      <div id="result"></div>
+    </div>
+
+    <script type="module">
+      import { createClient } from "./src/sdk.js";
+
+      let client = null;
+
+      function showResult(message, type = "info") {
+        const resultDiv = document.getElementById("result");
+        resultDiv.className = "result " + type;
+        resultDiv.textContent = message;
+      }
+
+      function getConfig() {
+        let serverUrl = document.getElementById("serverUrl").value.trim();
+        if (!serverUrl.startsWith("http")) {
+          serverUrl = "https://" + serverUrl;
+        }
+
+        return {
+          serverUrl,
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value,
+        };
+      }
+
+      function initializeClient() {
+        const config = getConfig();
+        try {
+          // Try with encryption disabled first
+          client = createClient(config.serverUrl, {
+            security: {
+              encryption: false, // Disable encryption
+              rateLimit: true,
+              jwtHardening: true,
+              ddosProtection: true,
+              headerSecurity: true,
+              contentSecurityPolicy: true,
+              autoTokenRefresh: true,
+            },
+          });
+          showResult(
+            "✅ SDK client initialized (encryption disabled)\nServer: " +
+              config.serverUrl,
+            "success"
+          );
+          return true;
+        } catch (error) {
+          showResult(
+            "❌ Failed to initialize client:\n" + error.message,
+            "error"
+          );
+          return false;
+        }
+      }
+
+      // Compare what SDK sends vs direct fetch
+      window.compareRequests = async function () {
+        const config = getConfig();
+        showResult("🔄 Comparing SDK vs Direct requests...", "info");
+
+        // Intercept fetch to see what SDK actually sends
+        const originalFetch = window.fetch;
+        let sdkRequest = null;
+
+        window.fetch = function (url, options) {
+          if (url.includes("/auth/signin")) {
+            sdkRequest = {
+              url: url,
+              method: options.method,
+              headers: Object.fromEntries(
+                Object.entries(options.headers || {})
+              ),
+              body: options.body,
+            };
+          }
+          return originalFetch.apply(this, arguments);
+        };
+
+        try {
+          if (!initializeClient()) return;
+
+          // Try SDK request (will be intercepted)
+          try {
+            await client.auth.signIn({
+              email: config.email,
+              password: config.password,
+            });
+          } catch (error) {
+            // We expect this might fail, we just want to see the request
+          }
+
+          // Restore original fetch
+          window.fetch = originalFetch;
+
+          // Show comparison
+          const directRequest = {
+            url: config.serverUrl + "/auth/signin",
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify({
+              email: config.email,
+              password: config.password,
+            }),
+          };
+
+          let comparison =
+            "📤 DIRECT REQUEST (WORKS):\n" +
+            JSON.stringify(directRequest, null, 2);
+          comparison +=
+            "\n\n📦 SDK REQUEST (FAILS):\n" +
+            JSON.stringify(sdkRequest, null, 2);
+
+          if (sdkRequest) {
+            comparison += "\n\n🔍 DIFFERENCES:";
+
+            // Check headers
+            const sdkHeaders = sdkRequest.headers;
+            const directHeaders = directRequest.headers;
+
+            Object.keys(sdkHeaders).forEach((header) => {
+              if (!directHeaders[header]) {
+                comparison +=
+                  "\n• SDK adds header: " + header + ": " + sdkHeaders[header];
+              }
+            });
+
+            // Check content type
+            if (sdkHeaders["Content-Type"] !== directHeaders["Content-Type"]) {
+              comparison +=
+                "\n• Content-Type differs: SDK=" +
+                sdkHeaders["Content-Type"] +
+                ", Direct=" +
+                directHeaders["Content-Type"];
+            }
+
+            // Check body
+            if (sdkRequest.body !== directRequest.body) {
+              comparison += "\n• Body differs (SDK may be encrypting)";
+            }
+          }
+
+          showResult(comparison, "info");
+        } catch (error) {
+          window.fetch = originalFetch;
+          showResult("❌ Comparison failed:\n" + error.message, "error");
+        }
+      };
+
+      // Debug function to test direct fetch
+      window.testDirectSignIn = async function () {
+        const config = getConfig();
+        showResult("🔄 Testing direct fetch sign in...", "info");
+
+        try {
+          const requestBody = {
+            email: config.email,
+            password: config.password,
+          };
+
+          showResult(
+            "📤 Sending request:\nURL: " +
+              config.serverUrl +
+              "/auth/signin\nBody: " +
+              JSON.stringify(requestBody, null, 2),
+            "info"
+          );
+
+          const response = await fetch(config.serverUrl + "/auth/signin", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          const responseText = await response.text();
+
+          showResult(
+            "📥 Response received:\nStatus: " +
+              response.status +
+              " " +
+              response.statusText +
+              "\nHeaders: " +
+              JSON.stringify(
+                Object.fromEntries(response.headers.entries()),
+                null,
+                2
+              ) +
+              "\nBody: " +
+              responseText,
+            response.ok ? "success" : "error"
+          );
+        } catch (error) {
+          showResult("❌ Direct fetch failed:\n" + error.message, "error");
+        }
+      };
+
+      // Test with encryption enabled
+      window.testWithEncryption = async function () {
+        const config = getConfig();
+        showResult("🔄 Testing SDK with encryption enabled...", "info");
+
+        try {
+          const encryptedClient = createClient(config.serverUrl, {
+            security: {
+              encryption: true, // Enable encryption
+            },
+          });
+
+          const response = await encryptedClient.auth.signIn({
+            email: config.email,
+            password: config.password,
+          });
+
+          showResult(
+            "✅ Sign In with Encryption Success!\n" +
+              JSON.stringify(response, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Sign In with Encryption Failed:\n" +
+              error.name +
+              ": " +
+              error.message +
+              "\n\nThis suggests the server may not support encrypted requests",
+            "error"
+          );
+        }
+      };
+
+      window.testSignUp = async function () {
+        if (!initializeClient()) return;
+
+        const config = getConfig();
+        showResult("🔄 Testing sign up...", "info");
+
+        try {
+          const response = await client.auth.signUp({
+            email: config.email,
+            password: config.password,
+          });
+
+          showResult(
+            "✅ Sign Up Success!\n" + JSON.stringify(response, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Sign Up Failed:\n" +
+              error.name +
+              ": " +
+              error.message +
+              "\n\nFull error: " +
+              JSON.stringify(error, null, 2),
+            "error"
+          );
+        }
+      };
+
+      window.testSignIn = async function () {
+        if (!initializeClient()) return;
+
+        const config = getConfig();
+        showResult("🔄 Testing sign in...", "info");
+
+        try {
+          const response = await client.auth.signIn({
+            email: config.email,
+            password: config.password,
+          });
+
+          showResult(
+            "✅ Sign In Success!\n" + JSON.stringify(response, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Sign In Failed:\n" +
+              error.name +
+              ": " +
+              error.message +
+              "\n\nFull error: " +
+              JSON.stringify(error, null, 2),
+            "error"
+          );
+        }
+      };
+
+      window.testSignOut = async function () {
+        if (!initializeClient()) return;
+
+        showResult("🔄 Testing sign out...", "info");
+
+        try {
+          const response = await client.auth.signOut();
+          showResult(
+            "✅ Sign Out Success!\n" + JSON.stringify(response, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Sign Out Failed:\n" + error.name + ": " + error.message,
+            "error"
+          );
+        }
+      };
+
+      window.getSession = async function () {
+        if (!initializeClient()) return;
+
+        showResult("🔄 Getting session...", "info");
+
+        try {
+          const response = await client.auth.getSession();
+          showResult(
+            "✅ Session Retrieved!\n" + JSON.stringify(response, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Get Session Failed:\n" + error.name + ": " + error.message,
+            "error"
+          );
+        }
+      };
+
+      // Test server health
+      window.testServer = async function () {
+        const config = getConfig();
+        showResult("🔄 Testing server health...", "info");
+
+        try {
+          const response = await fetch(config.serverUrl);
+          const data = await response.json();
+
+          showResult(
+            "✅ Server Health Check:\n" + JSON.stringify(data, null, 2),
+            "success"
+          );
+        } catch (error) {
+          showResult(
+            "❌ Server Health Check Failed:\n" + error.message,
+            "error"
+          );
+        }
+      };
+
+      // Auto-initialize on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        showResult(
+          'Ready to test! First try "Test Server" to verify connection.',
+          "info"
+        );
+      });
+    </script>
+  </body>
+</html>

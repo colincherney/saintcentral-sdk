@@ -1,220 +1,479 @@
 /**
- * Saint Central SDK
+ * Saint Central SDK - Production Ready
  *
- * A secure alternative to Supabase SDK with enhanced security features,
+ * A secure alternative to Supabase SDK with enterprise-grade security features,
  * designed to be a drop-in replacement with identical API signatures.
- * Built on Cloudflare Workers for improved performance and security.
+ * Built for Cloudflare Workers with real encryption and comprehensive error handling.
  *
- * No API key version - uses token-based authentication instead
+ * @version 2.0.0
  */
 
 // Core client that integrates all Saint Central services
 export function createClient(url, options = {}) {
   const apiUrl = new URL(url);
 
+  // Generate a secure encryption key - define this first
+  const generateEncryptionKey = () => {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
+  };
+
   // Enhanced security features
   const securityOptions = {
-    // Default security configuration
     encryption: true,
     rateLimit: true,
     jwtHardening: true,
     ddosProtection: true,
     headerSecurity: true,
     contentSecurityPolicy: true,
+    autoTokenRefresh: true,
     ...options.security,
   };
 
-  // Cloudflare Workers integration
-  const cloudflareOptions = {
-    // Cloudflare Worker configuration
-    enabled: true,
-    cacheControl: "max-age=3600",
-    edgeLocation: "auto",
-    ...options.cloudflare,
+  // Configuration - now generateEncryptionKey is available
+  const config = {
+    maxRetries: 3,
+    retryDelay: 1000,
+    requestTimeout: 30000,
+    encryptionKey: options.encryptionKey || generateEncryptionKey(),
+    ...options.config,
   };
 
   // Local storage keys
   const STORAGE_KEY = "saint_central_auth";
+  const ENCRYPTION_KEY_STORAGE = "saint_central_encryption_key";
 
-  // Get stored auth data
+  // Initialize encryption key
+  const initializeEncryption = () => {
+    let key = config.encryptionKey;
+
+    if (!key && typeof localStorage !== "undefined") {
+      try {
+        key = localStorage.getItem(ENCRYPTION_KEY_STORAGE);
+        if (!key) {
+          key = generateEncryptionKey();
+          localStorage.setItem(ENCRYPTION_KEY_STORAGE, key);
+        }
+      } catch (error) {
+        console.warn("Could not access localStorage for encryption key");
+        key = generateEncryptionKey();
+      }
+    }
+
+    config.encryptionKey = key;
+    return key;
+  };
+
+  // Initialize encryption on first load
+  initializeEncryption();
+
+  // Enhanced auth storage with encryption
   const getStoredAuth = () => {
     try {
+      if (typeof localStorage === "undefined") return null;
+
       const storedAuth = localStorage.getItem(STORAGE_KEY);
-      return storedAuth ? JSON.parse(storedAuth) : null;
+      if (!storedAuth) return null;
+
+      const parsed = JSON.parse(storedAuth);
+
+      // Check if auth data is expired
+      if (parsed.expires_at && Date.now() / 1000 > parsed.expires_at) {
+        clearStoredAuth();
+        return null;
+      }
+
+      return parsed;
     } catch (error) {
       console.error("Error retrieving auth from storage:", error);
       return null;
     }
   };
 
-  // Store auth data
   const storeAuth = (auth) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+      if (typeof localStorage === "undefined") return;
+
+      // Add expiration timestamp
+      const authWithExpiry = {
+        ...auth,
+        stored_at: Date.now(),
+        expires_at: auth.expires_at || Date.now() / 1000 + 3600, // 1 hour default
+      };
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(authWithExpiry));
     } catch (error) {
       console.error("Error storing auth:", error);
     }
   };
 
-  // Clear stored auth data
   const clearStoredAuth = () => {
     try {
+      if (typeof localStorage === "undefined") return;
       localStorage.removeItem(STORAGE_KEY);
     } catch (error) {
       console.error("Error clearing auth:", error);
     }
   };
 
-  const fetchWithAuth = async (path, options = {}) => {
-    // Get current auth data from storage
+  // Real AES-GCM encryption using Web Crypto API
+  const realEncryption = {
+    async encrypt(data) {
+      try {
+        const encoder = new TextEncoder();
+        const dataBuffer = encoder.encode(JSON.stringify(data));
+
+        // Generate a random IV
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+
+        // Convert hex key to buffer
+        const keyBuffer = new Uint8Array(
+          config.encryptionKey
+            .match(/.{1,2}/g)
+            .map((byte) => parseInt(byte, 16))
+        );
+
+        // Import the key
+        const cryptoKey = await crypto.subtle.importKey(
+          "raw",
+          keyBuffer,
+          { name: "AES-GCM" },
+          false,
+          ["encrypt"]
+        );
+
+        // Encrypt the data
+        const encryptedBuffer = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          cryptoKey,
+          dataBuffer
+        );
+
+        // Combine IV and encrypted data
+        const result = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+        result.set(iv, 0);
+        result.set(new Uint8Array(encryptedBuffer), iv.length);
+
+        // Convert to base64
+        const base64 = btoa(String.fromCharCode(...result));
+
+        return {
+          version: 2,
+          algorithm: "aes-256-gcm",
+          data: base64,
+          encrypted: true,
+        };
+      } catch (error) {
+        console.error("Encryption failed:", error);
+        throw new SaintCentralError({
+          message: "Encryption failed",
+          code: "ENCRYPTION_ERROR",
+          originalError: error,
+        });
+      }
+    },
+
+    async decrypt(encryptedData) {
+      try {
+        if (
+          !encryptedData ||
+          !encryptedData.encrypted ||
+          encryptedData.version !== 2
+        ) {
+          return encryptedData;
+        }
+
+        const decoder = new TextDecoder();
+
+        // Decode base64
+        const combined = Uint8Array.from(atob(encryptedData.data), (c) =>
+          c.charCodeAt(0)
+        );
+
+        // Extract IV and encrypted data
+        const iv = combined.slice(0, 12);
+        const encrypted = combined.slice(12);
+
+        // Convert hex key to buffer
+        const keyBuffer = new Uint8Array(
+          config.encryptionKey
+            .match(/.{1,2}/g)
+            .map((byte) => parseInt(byte, 16))
+        );
+
+        // Import the key
+        const cryptoKey = await crypto.subtle.importKey(
+          "raw",
+          keyBuffer,
+          { name: "AES-GCM" },
+          false,
+          ["decrypt"]
+        );
+
+        // Decrypt the data
+        const decryptedBuffer = await crypto.subtle.decrypt(
+          { name: "AES-GCM", iv },
+          cryptoKey,
+          encrypted
+        );
+
+        // Convert back to string and parse JSON
+        const decryptedString = decoder.decode(decryptedBuffer);
+        return JSON.parse(decryptedString);
+      } catch (error) {
+        console.error("Decryption failed:", error);
+        throw new SaintCentralError({
+          message: "Decryption failed",
+          code: "DECRYPTION_ERROR",
+          originalError: error,
+        });
+      }
+    },
+  };
+
+  // Enhanced fetch with automatic retry, rate limiting, and token refresh
+  const fetchWithAuth = async (path, options = {}, retryCount = 0) => {
     const authData = getStoredAuth();
 
-    // Create a clean options object
-    const fetchOptions = {
-      method: options.method || "GET",
-      credentials: "omit", // Don't send cookies to avoid CORS issues
-      mode: "cors", // Explicitly set CORS mode
-      cache: "no-cache", // Avoid caching issues
-    };
+    // Check if we need to refresh the token
+    if (authData && securityOptions.autoTokenRefresh) {
+      const expiresAt = authData.expires_at || 0;
+      const refreshThreshold = 300; // Refresh if expires within 5 minutes
 
-    // Initialize headers with minimal required values
-    fetchOptions.headers = {
-      "Content-Type": "application/json",
-    };
-
-    // Only add security headers for non-OPTIONS requests and only those that don't cause CORS issues
-    if (fetchOptions.method !== "OPTIONS") {
-      fetchOptions.headers["X-Security-Nonce"] = generateNonce();
-      fetchOptions.headers["X-Request-ID"] = generateRequestId();
+      if (
+        expiresAt - Date.now() / 1000 < refreshThreshold &&
+        authData.refresh_token
+      ) {
+        try {
+          await refreshToken();
+        } catch (error) {
+          console.warn("Token refresh failed:", error);
+        }
+      }
     }
 
-    // Copy any headers from options
+    const fetchOptions = {
+      method: options.method || "GET",
+      credentials: "omit",
+      mode: "cors",
+      cache: "no-cache",
+      signal: AbortSignal.timeout(config.requestTimeout),
+    };
+
+    // Enhanced security headers
+    fetchOptions.headers = {
+      "Content-Type": "application/json",
+      "X-Security-Nonce": generateSecureNonce(),
+      "X-Request-ID": generateRequestId(),
+      "X-Client-Version": "2.0.0",
+      "User-Agent": "SaintCentral-SDK/2.0.0",
+    };
+
+    // Copy custom headers
     if (options.headers) {
       Object.assign(fetchOptions.headers, options.headers);
     }
 
     // Add auth token if available
-    if (authData && authData.access_token) {
-      fetchOptions.headers["Authorization"] = `Bearer ${authData.access_token}`;
+    const currentAuth = getStoredAuth();
+    if (currentAuth && currentAuth.access_token) {
+      fetchOptions.headers[
+        "Authorization"
+      ] = `Bearer ${currentAuth.access_token}`;
     }
 
-    // Add body if present
+    // Handle body and encryption
     if (options.body) {
-      fetchOptions.body = options.body;
-    }
-
-    // Apply security enhancements if encryption is enabled
-    // This may modify Content-Type based on encryption
-    if (
-      securityOptions.encryption &&
-      fetchOptions.body &&
-      typeof fetchOptions.body === "string"
-    ) {
-      try {
-        console.log("Applying encryption to payload");
-        fetchOptions.body = encryptPayload(fetchOptions.body);
-        fetchOptions.headers["Content-Type"] = "application/encrypted+json";
-      } catch (err) {
-        console.error("Encryption failed, sending unencrypted:", err);
+      if (securityOptions.encryption && typeof options.body === "string") {
+        try {
+          const bodyData = JSON.parse(options.body);
+          const encryptedBody = await realEncryption.encrypt(bodyData);
+          fetchOptions.body = JSON.stringify(encryptedBody);
+          fetchOptions.headers["Content-Type"] = "application/encrypted+json";
+        } catch (error) {
+          console.warn("Encryption failed, sending unencrypted:", error);
+          fetchOptions.body = options.body;
+        }
+      } else {
+        fetchOptions.body = options.body;
       }
     }
 
-    // Route through Cloudflare worker
     const endpoint = `${apiUrl.origin}/${path}`;
 
-    console.log(
-      `Making request to ${endpoint} with method ${fetchOptions.method}`
-    );
-    console.log("Request headers:", fetchOptions.headers);
-
-    if (fetchOptions.body) {
-      console.log(
-        "Request body preview:",
-        typeof fetchOptions.body === "string"
-          ? fetchOptions.body.substring(0, 100) + "..."
-          : "Non-string body"
-      );
-    }
-
     try {
-      // Use a more basic approach for fetch to avoid issues
       const response = await fetch(endpoint, fetchOptions);
 
-      console.log(`Response status: ${response.status}`);
+      // Handle rate limiting
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After") || "60";
+        const delay = parseInt(retryAfter) * 1000;
 
-      // For non-JSON responses or errors, handle accordingly
+        if (retryCount < config.maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return fetchWithAuth(path, options, retryCount + 1);
+        }
+
+        throw new RateLimitError({
+          message: "Rate limit exceeded",
+          retryAfter: delay,
+          headers: Object.fromEntries(response.headers.entries()),
+        });
+      }
+
+      // Handle authentication errors
+      if (response.status === 401) {
+        clearStoredAuth();
+        throw new AuthError({
+          message: "Authentication failed",
+          status: 401,
+        });
+      }
+
+      // Parse response
+      const contentType = response.headers.get("Content-Type") || "";
+      let data;
+
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else if (
+        response.headers.get("Content-Length") === "0" ||
+        response.status === 204
+      ) {
+        data = null;
+      } else {
+        data = await response.arrayBuffer();
+      }
+
       if (!response.ok) {
-        return {
-          data: null,
-          error: {
-            message: `HTTP error ${response.status}`,
-            status: response.status,
-          },
+        const error = data?.error || {
+          message: `HTTP ${response.status}: ${response.statusText}`,
+          status: response.status,
         };
+
+        throw createErrorFromResponse(error, response.status);
       }
 
-      // Try to parse response as JSON
-      try {
-        const data = await response.json();
-        console.log("Response data:", data);
-
-        // Handle authentication responses specially to store tokens
-        if (
-          path.startsWith("auth/signin") ||
+      // Handle authentication responses
+      if (
+        (path.startsWith("auth/signin") ||
           path.startsWith("auth/signup") ||
-          path.startsWith("auth/token")
-        ) {
-          if (data.data && data.data.session) {
-            storeAuth(data.data.session);
-          }
-        }
-
-        // Handle sign out
-        if (path.startsWith("auth/signout") && !data.error) {
-          clearStoredAuth();
-        }
-
-        return { data: data.data, error: data.error };
-      } catch (jsonError) {
-        console.error("JSON parse error:", jsonError);
-        return {
-          data: null,
-          error: { message: "Invalid JSON response", originalError: jsonError },
-        };
+          path.startsWith("auth/token")) &&
+        data?.data?.session
+      ) {
+        storeAuth(data.data.session);
       }
+
+      // Handle sign out
+      if (path.startsWith("auth/signout") && !data?.error) {
+        clearStoredAuth();
+      }
+
+      return {
+        data: data?.data || data,
+        error: data?.error || null,
+        requestId: response.headers.get("X-Request-ID"),
+      };
     } catch (error) {
-      console.error("Fetch error:", error);
-      return { data: null, error: new SaintCentralError(error) };
+      if (error.name === "AbortError") {
+        throw new NetworkError({
+          message: "Request timeout",
+          code: "TIMEOUT",
+          originalError: error,
+        });
+      }
+
+      if (error instanceof SaintCentralError) {
+        throw error;
+      }
+
+      // Retry on network errors
+      if (retryCount < config.maxRetries && isRetryableError(error)) {
+        const delay = config.retryDelay * Math.pow(2, retryCount);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return fetchWithAuth(path, options, retryCount + 1);
+      }
+
+      throw new NetworkError({
+        message: error.message || "Network request failed",
+        originalError: error,
+      });
     }
   };
 
-  // Security utility functions
-  const generateNonce = () => {
-    return (
-      Math.random().toString(36).substring(2, 15) +
-      Math.random().toString(36).substring(2, 15)
+  // Token refresh functionality
+  const refreshToken = async () => {
+    const authData = getStoredAuth();
+    if (!authData || !authData.refresh_token) {
+      throw new AuthError({ message: "No refresh token available" });
+    }
+
+    const response = await fetch(`${apiUrl.origin}/auth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-ID": generateRequestId(),
+      },
+      body: JSON.stringify({
+        refresh_token: authData.refresh_token,
+      }),
+    });
+
+    if (!response.ok) {
+      clearStoredAuth();
+      throw new AuthError({ message: "Token refresh failed" });
+    }
+
+    const data = await response.json();
+    if (data.data) {
+      storeAuth(data.data);
+      return data.data;
+    }
+
+    throw new AuthError({ message: "Invalid refresh response" });
+  };
+
+  // Utility functions
+  const generateSecureNonce = () => {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
     );
   };
 
   const generateRequestId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
+    return `req_${Date.now()}_${crypto.randomUUID()}`;
   };
 
-  const encryptPayload = (payload) => {
-    // Simplified encryption for demo purposes
-    // In a real implementation, you would use AES or another strong algorithm
-    try {
-      // The encryption format matches what the server expects
-      return JSON.stringify({
-        version: 1,
-        algorithm: "aes-256-gcm",
-        data: payload, // In a real implementation, this would be encrypted
-        encrypted: true,
-      });
-    } catch (error) {
-      console.error("Encryption error:", error);
-      return payload;
-    }
+  const isRetryableError = (error) => {
+    return (
+      error.code === "NETWORK_ERROR" ||
+      error.code === "TIMEOUT" ||
+      (error.status >= 500 && error.status < 600)
+    );
+  };
+
+  const createErrorFromResponse = (errorData, status) => {
+    const errorMap = {
+      400: ValidationError,
+      401: AuthError,
+      403: PermissionError,
+      404: NotFoundError,
+      409: ConflictError,
+      422: ValidationError,
+      429: RateLimitError,
+      500: ServerError,
+    };
+
+    const ErrorClass = errorMap[status] || SaintCentralError;
+    return new ErrorClass({
+      ...errorData,
+      status,
+    });
   };
 
   // Initialize all service clients
@@ -223,6 +482,7 @@ export function createClient(url, options = {}) {
     securityOptions,
     getStoredAuth,
     clearStoredAuth,
+    refreshToken,
   });
 
   const storage = createStorageClient(fetchWithAuth, {
@@ -241,7 +501,6 @@ export function createClient(url, options = {}) {
     securityOptions,
   });
 
-  // Create a database query builder
   const database = {
     from: (table) => createTableQueryBuilder(table, fetchWithAuth),
     rpc: (fn, params) => callStoredProcedure(fn, params, fetchWithAuth),
@@ -256,179 +515,151 @@ export function createClient(url, options = {}) {
     functions,
     realtime,
 
-    // Additional Saint Central-specific functionality
+    // Saint Central-specific functionality
     security: {
-      configure: (config) => Object.assign(securityOptions, config),
+      configure: (newConfig) => Object.assign(securityOptions, newConfig),
       status: () => ({ ...securityOptions }),
+      rotateEncryptionKey: () => {
+        config.encryptionKey = generateEncryptionKey();
+        if (typeof localStorage !== "undefined") {
+          try {
+            localStorage.setItem(ENCRYPTION_KEY_STORAGE, config.encryptionKey);
+          } catch (error) {
+            console.warn("Could not store new encryption key");
+          }
+        }
+        return config.encryptionKey;
+      },
     },
 
-    // Helper for raw REST API calls
+    // Enhanced REST client
     rest: {
       get: (path) => fetchWithAuth(path, { method: "GET" }),
       post: (path, body) =>
-        fetchWithAuth(path, { method: "POST", body: JSON.stringify(body) }),
+        fetchWithAuth(path, {
+          method: "POST",
+          body: JSON.stringify(body),
+        }),
       put: (path, body) =>
-        fetchWithAuth(path, { method: "PUT", body: JSON.stringify(body) }),
+        fetchWithAuth(path, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        }),
+      patch: (path, body) =>
+        fetchWithAuth(path, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        }),
       delete: (path) => fetchWithAuth(path, { method: "DELETE" }),
+    },
+
+    // Utility methods
+    utils: {
+      generateId: () => crypto.randomUUID(),
+      encrypt: realEncryption.encrypt,
+      decrypt: realEncryption.decrypt,
+      refreshToken,
     },
   };
 }
 
 /**
- * Auth Client Implementation
- * Handles user authentication and management
+ * Enhanced Auth Client Implementation
  */
 function createAuthClient(fetch, options) {
-  // Session management
   const getSession = async () => {
     const authData = options.getStoredAuth();
-
     if (!authData) {
-      return { data: null, error: { message: "No session found" } };
+      return { data: { session: null }, error: null };
     }
 
-    // Verify the session with the server
-    return fetch("auth/session", { method: "GET" });
+    try {
+      const result = await fetch("auth/session", { method: "GET" });
+      return result;
+    } catch (error) {
+      options.clearStoredAuth();
+      return { data: { session: null }, error };
+    }
   };
 
   const refreshSession = async () => {
-    const authData = options.getStoredAuth();
-
-    if (!authData || !authData.refresh_token) {
-      return { data: null, error: { message: "No refresh token found" } };
+    try {
+      return await options.refreshToken();
+    } catch (error) {
+      return { data: null, error };
     }
-
-    return fetch("auth/token", {
-      method: "POST",
-      body: JSON.stringify({ refresh_token: authData.refresh_token }),
-    });
   };
 
-  // User authentication methods
   const signUp = async (credentials) => {
+    validateCredentials(credentials, ["email", "password"]);
     return fetch("auth/signup", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
   };
 
-  const signIn = async (credentials) => {
-    console.log("SDK signIn called with:", credentials);
-
-    // Send the credentials exactly as provided
-    const payload = JSON.stringify(credentials);
-    console.log("Sending raw payload:", payload);
-
-    return fetch("auth/signin", {
-      method: "POST",
-      body: payload,
-    });
-  };
-
   const signInWithPassword = async (credentials) => {
-    console.log("SDK signInWithPassword called with:", credentials);
+    validateCredentials(credentials, ["password"]);
 
-    // Ensure email/phone and password are present
     if (!credentials.email && !credentials.phone) {
-      return {
-        data: null,
-        error: {
-          message: "Email or phone is required",
-          code: "client_validation",
-        },
-      };
+      throw new ValidationError({
+        message: "Email or phone is required",
+        code: "missing_credentials",
+      });
     }
-
-    if (!credentials.password) {
-      return {
-        data: null,
-        error: { message: "Password is required", code: "client_validation" },
-      };
-    }
-
-    // Send the credentials exactly as provided
-    // But make sure to include gotrue_meta_security if not present
-    const finalCredentials = {
-      ...credentials,
-      gotrue_meta_security: credentials.gotrue_meta_security || {},
-    };
-
-    const payload = JSON.stringify(finalCredentials);
-    console.log("Sending raw payload:", payload);
 
     return fetch("auth/signin", {
       method: "POST",
-      body: payload,
+      body: JSON.stringify(credentials),
     });
   };
+
+  const signIn = signInWithPassword; // Alias for compatibility
 
   const signOut = async () => {
-    const result = await fetch("auth/signout", { method: "POST" });
-
-    // Clear local session regardless of server response
-    if (!result.error) {
+    try {
+      const result = await fetch("auth/signout", { method: "POST" });
       options.clearStoredAuth();
+      return result;
+    } catch (error) {
+      options.clearStoredAuth();
+      return { data: null, error };
     }
-
-    return result;
   };
 
   const resetPasswordForEmail = async (email) => {
+    if (!email) {
+      throw new ValidationError({
+        message: "Email is required",
+        code: "missing_email",
+      });
+    }
+
     return fetch("auth/recover", {
       method: "POST",
       body: JSON.stringify({ email }),
     });
   };
 
-  // OAuth providers
   const signInWithOAuth = async (provider, options = {}) => {
     return fetch("auth/authorize", {
       method: "POST",
-      body: JSON.stringify({
-        provider,
-        ...options,
-      }),
+      body: JSON.stringify({ provider, ...options }),
     });
   };
 
-  // Enhanced security features for auth
-  const securityEnhancements = {
-    enableMFA: async () => {
-      return fetch("auth/mfa/enable", { method: "POST" });
-    },
-    verifyMFA: async (code) => {
-      return fetch("auth/mfa/verify", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-      });
-    },
-    disableMFA: async () => {
-      return fetch("auth/mfa/disable", { method: "POST" });
-    },
-  };
-
-  // Admin functions
-  const admin = {
-    createUser: async (userData) => {
-      return fetch("auth/admin/users", {
-        method: "POST",
-        body: JSON.stringify(userData),
-      });
-    },
-    deleteUser: async (userId) => {
-      return fetch(`auth/admin/users/${userId}`, {
-        method: "DELETE",
-      });
-    },
-    listUsers: async (page = 1, perPage = 50) => {
-      return fetch(`auth/admin/users?page=${page}&per_page=${perPage}`, {
-        method: "GET",
-      });
-    },
+  const validateCredentials = (credentials, required) => {
+    for (const field of required) {
+      if (!credentials[field]) {
+        throw new ValidationError({
+          message: `${field} is required`,
+          code: `missing_${field}`,
+        });
+      }
+    }
   };
 
   return {
-    // Standard Supabase Auth API
     getSession,
     refreshSession,
     signUp,
@@ -437,28 +668,32 @@ function createAuthClient(fetch, options) {
     signOut,
     resetPasswordForEmail,
     signInWithOAuth,
-
-    // Supabase-compatible provider shortcuts
-    signInWithGoogle: (options) => signInWithOAuth("google", options),
-    signInWithFacebook: (options) => signInWithOAuth("facebook", options),
-    signInWithGithub: (options) => signInWithOAuth("github", options),
-
-    // Enhanced Saint Central security features
-    security: securityEnhancements,
-
-    // Admin API
-    admin,
+    signInWithGoogle: (opts) => signInWithOAuth("google", opts),
+    signInWithFacebook: (opts) => signInWithOAuth("facebook", opts),
+    signInWithGithub: (opts) => signInWithOAuth("github", opts),
   };
 }
 
 /**
- * Storage Client Implementation
- * Handles file storage and retrieval
+ * Enhanced Storage Client Implementation
  */
 function createStorageClient(fetch, options) {
   const from = (bucket) => {
-    // File operations on specific bucket
+    if (!bucket) {
+      throw new ValidationError({
+        message: "Bucket name is required",
+        code: "missing_bucket",
+      });
+    }
+
     const upload = async (path, fileBody, fileOptions = {}) => {
+      if (!path || !fileBody) {
+        throw new ValidationError({
+          message: "Path and file body are required",
+          code: "missing_upload_params",
+        });
+      }
+
       const formData = new FormData();
       formData.append("file", fileBody);
 
@@ -469,16 +704,31 @@ function createStorageClient(fetch, options) {
       return fetch(`storage/object/${bucket}/${path}`, {
         method: "POST",
         body: formData,
+        headers: {}, // Don't set Content-Type for FormData
       });
     };
 
     const download = async (path) => {
+      if (!path) {
+        throw new ValidationError({
+          message: "Path is required",
+          code: "missing_path",
+        });
+      }
+
       return fetch(`storage/object/${bucket}/${path}`, {
         method: "GET",
       });
     };
 
     const remove = async (paths) => {
+      if (!paths || (Array.isArray(paths) && paths.length === 0)) {
+        throw new ValidationError({
+          message: "Paths are required",
+          code: "missing_paths",
+        });
+      }
+
       return fetch(`storage/object/${bucket}`, {
         method: "DELETE",
         body: JSON.stringify({
@@ -490,13 +740,8 @@ function createStorageClient(fetch, options) {
     const list = async (prefix = "", options = {}) => {
       const query = new URLSearchParams({ prefix });
 
-      if (options.limit) {
-        query.append("limit", options.limit);
-      }
-
-      if (options.offset) {
-        query.append("offset", options.offset);
-      }
+      if (options.limit) query.append("limit", options.limit);
+      if (options.offset) query.append("offset", options.offset);
 
       return fetch(`storage/object/list/${bucket}?${query.toString()}`, {
         method: "GET",
@@ -504,21 +749,30 @@ function createStorageClient(fetch, options) {
     };
 
     const getPublicUrl = (path) => {
-      const origin = options.url;
-      return `${origin}/storage/object/public/${bucket}/${path}`;
+      if (!path) {
+        throw new ValidationError({
+          message: "Path is required",
+          code: "missing_path",
+        });
+      }
+      return {
+        data: {
+          publicUrl: `${options.url}/storage/object/public/${bucket}/${path}`,
+        },
+      };
     };
 
-    return {
-      upload,
-      download,
-      remove,
-      list,
-      getPublicUrl,
-    };
+    return { upload, download, remove, list, getPublicUrl };
   };
 
-  // Bucket operations
   const createBucket = async (bucketName, bucketOptions = {}) => {
+    if (!bucketName) {
+      throw new ValidationError({
+        message: "Bucket name is required",
+        code: "missing_bucket_name",
+      });
+    }
+
     return fetch("storage/bucket", {
       method: "POST",
       body: JSON.stringify({
@@ -529,109 +783,134 @@ function createStorageClient(fetch, options) {
   };
 
   const deleteBucket = async (bucketName) => {
+    if (!bucketName) {
+      throw new ValidationError({
+        message: "Bucket name is required",
+        code: "missing_bucket_name",
+      });
+    }
+
     return fetch(`storage/bucket/${bucketName}`, {
       method: "DELETE",
     });
   };
 
   const listBuckets = async () => {
-    return fetch("storage/bucket", {
-      method: "GET",
-    });
+    return fetch("storage/bucket", { method: "GET" });
   };
 
-  return {
-    from,
-    createBucket,
-    deleteBucket,
-    listBuckets,
-  };
+  return { from, createBucket, deleteBucket, listBuckets };
 }
 
 /**
- * Realtime Client Implementation
- * Handles realtime subscriptions and messaging
+ * Enhanced Realtime Client Implementation
  */
 function createRealtimeClient(options) {
   let socket = null;
-  let channels = {};
+  let channels = new Map();
+  let reconnectAttempts = 0;
+  const maxReconnectAttempts = 5;
 
   const connect = () => {
-    // Implementation for WebSocket connections with enhanced security
-    const wsUrl = options.url.replace("http", "ws");
-
-    // Get auth token if available
+    const wsUrl = options.url.replace(/^http/, "ws");
     const authData = options.getAuth ? options.getAuth() : null;
-    const token = authData ? authData.access_token : null;
+    const token = authData?.access_token;
 
-    // Create endpoint with token if available
     const wsEndpoint = token
-      ? `${wsUrl}/realtime/v1?token=${token}`
+      ? `${wsUrl}/realtime/v1?token=${encodeURIComponent(token)}`
       : `${wsUrl}/realtime/v1`;
 
     socket = new WebSocket(wsEndpoint);
 
-    // Add security heartbeat and reconnection logic
     socket.onopen = () => {
+      console.log("WebSocket connected");
+      reconnectAttempts = 0;
       startHeartbeat();
     };
 
-    socket.onclose = () => {
-      setTimeout(connect, 1000); // Reconnect with backoff logic
+    socket.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason);
+      if (reconnectAttempts < maxReconnectAttempts) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        setTimeout(() => {
+          reconnectAttempts++;
+          connect();
+        }, delay);
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
     };
 
     return socket;
   };
 
   const startHeartbeat = () => {
-    setInterval(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "heartbeat" }));
+    const heartbeatInterval = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({ type: "heartbeat", timestamp: Date.now() })
+        );
+      } else {
+        clearInterval(heartbeatInterval);
       }
-    }, 30000); // 30 second heartbeat
+    }, 30000);
   };
 
-  const channel = (name) => {
-    if (!socket) {
+  const channel = (name, options = {}) => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
       connect();
     }
 
-    // Create or reuse channel
-    if (!channels[name]) {
-      channels[name] = createChannel(name, socket);
+    if (!channels.has(name)) {
+      channels.set(name, createChannel(name, socket, options));
     }
 
-    return channels[name];
+    return channels.get(name);
   };
 
-  const createChannel = (name, socket) => {
-    let listeners = {};
+  const createChannel = (name, socket, options) => {
+    let listeners = new Map();
     let subscribed = false;
 
     const subscribe = (callback) => {
+      if (!socket) {
+        throw new Error("WebSocket not connected");
+      }
+
       socket.send(
         JSON.stringify({
           type: "subscribe",
           channel: name,
+          config: options,
         })
       );
 
       subscribed = true;
 
-      socket.addEventListener("message", (event) => {
-        const data = JSON.parse(event.data);
-        if (data.channel === name) {
-          callback(data.payload);
+      const messageHandler = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.channel === name) {
+            callback(data.payload);
 
-          // Call specific event listeners
-          if (data.event && listeners[data.event]) {
-            listeners[data.event].forEach((listener) => listener(data.payload));
+            if (data.event && listeners.has(data.event)) {
+              listeners
+                .get(data.event)
+                .forEach((listener) => listener(data.payload));
+            }
           }
+        } catch (error) {
+          console.error("Error handling WebSocket message:", error);
         }
-      });
+      };
+
+      socket.addEventListener("message", messageHandler);
 
       return {
         unsubscribe: () => {
+          socket.removeEventListener("message", messageHandler);
           socket.send(
             JSON.stringify({
               type: "unsubscribe",
@@ -639,20 +918,20 @@ function createRealtimeClient(options) {
             })
           );
           subscribed = false;
+          channels.delete(name);
         },
       };
     };
 
     const on = (event, callback) => {
-      if (!listeners[event]) {
-        listeners[event] = [];
+      if (!listeners.has(event)) {
+        listeners.set(event, new Set());
       }
-
-      listeners[event].push(callback);
+      listeners.get(event).add(callback);
 
       return {
         unsubscribe: () => {
-          listeners[event] = listeners[event].filter((cb) => cb !== callback);
+          listeners.get(event)?.delete(callback);
         },
       };
     };
@@ -668,15 +947,12 @@ function createRealtimeClient(options) {
           channel: name,
           event,
           payload,
+          timestamp: Date.now(),
         })
       );
     };
 
-    return {
-      subscribe,
-      on,
-      send,
-    };
+    return { subscribe, on, send };
   };
 
   return {
@@ -686,18 +962,24 @@ function createRealtimeClient(options) {
       if (socket) {
         socket.close();
         socket = null;
+        channels.clear();
       }
     },
   };
 }
 
 /**
- * Edge Functions Client Implementation
- * Handles serverless function invocation
+ * Enhanced Functions Client Implementation
  */
 function createFunctionsClient(fetch, options) {
   const invoke = async (functionName, payload = {}, invokeOptions = {}) => {
-    // Enhanced security for function invocation
+    if (!functionName) {
+      throw new ValidationError({
+        message: "Function name is required",
+        code: "missing_function_name",
+      });
+    }
+
     const headers = {
       "Content-Type": "application/json",
       ...invokeOptions.headers,
@@ -710,16 +992,20 @@ function createFunctionsClient(fetch, options) {
     });
   };
 
-  return {
-    invoke,
-  };
+  return { invoke };
 }
 
 /**
- * Database Query Builder Implementation
- * For building SQL queries with a fluent interface
+ * Enhanced Database Query Builder Implementation
  */
 function createTableQueryBuilder(table, fetch) {
+  if (!table) {
+    throw new ValidationError({
+      message: "Table name is required",
+      code: "missing_table",
+    });
+  }
+
   let queryFilters = [];
   let queryOptions = {
     limit: null,
@@ -728,47 +1014,31 @@ function createTableQueryBuilder(table, fetch) {
     select: "*",
   };
 
-  // Build the final query URL with filters and options
   const buildQueryUrl = () => {
     const url = new URL(`rest/v1/${table}`, "http://placeholder");
 
-    // Add filters
-    if (queryFilters.length > 0) {
-      queryFilters.forEach((filter) => {
-        url.searchParams.append(
-          filter.column,
-          `${filter.operator}.${filter.value}`
-        );
-      });
-    }
+    queryFilters.forEach((filter) => {
+      url.searchParams.append(
+        filter.column,
+        `${filter.operator}.${filter.value}`
+      );
+    });
 
-    // Add options
-    if (queryOptions.select) {
-      url.searchParams.append("select", queryOptions.select);
-    }
-
-    if (queryOptions.limit) {
-      url.searchParams.append("limit", queryOptions.limit);
-    }
-
-    if (queryOptions.offset) {
-      url.searchParams.append("offset", queryOptions.offset);
-    }
-
-    if (queryOptions.order) {
-      url.searchParams.append("order", queryOptions.order);
-    }
+    Object.entries(queryOptions).forEach(([key, value]) => {
+      if (value !== null) {
+        url.searchParams.append(key, value);
+      }
+    });
 
     return url.pathname + url.search;
   };
 
-  // Query filters
   const filter = (column, operator, value) => {
     queryFilters.push({ column, operator, value });
     return builder;
   };
 
-  // Common filter shortcuts
+  // Filter shortcuts
   const eq = (column, value) => filter(column, "eq", value);
   const neq = (column, value) => filter(column, "neq", value);
   const gt = (column, value) => filter(column, "gt", value);
@@ -778,6 +1048,7 @@ function createTableQueryBuilder(table, fetch) {
   const like = (column, value) => filter(column, "like", value);
   const ilike = (column, value) => filter(column, "ilike", value);
   const in_ = (column, values) => filter(column, "in", `(${values.join(",")})`);
+  const is_ = (column, value) => filter(column, "is", value);
 
   // Query options
   const select = (columns) => {
@@ -797,19 +1068,15 @@ function createTableQueryBuilder(table, fetch) {
 
   const order = (column, options = {}) => {
     const direction = options.ascending ? "asc" : "desc";
-    const nullsOption = options.nullsFirst ? "nullsfirst" : "nullslast";
-    queryOptions.order = `${column}.${direction}.${nullsOption}`;
+    queryOptions.order = `${column}.${direction}`;
     return builder;
   };
 
   // Execute queries
-  const get = async () => {
-    return fetch(buildQueryUrl(), { method: "GET" });
-  };
+  const get = async () => fetch(buildQueryUrl(), { method: "GET" });
 
   const insert = async (values, options = {}) => {
     const body = Array.isArray(values) ? values : [values];
-
     const url = new URL(`rest/v1/${table}`, "http://placeholder");
 
     if (options.returning) {
@@ -823,17 +1090,21 @@ function createTableQueryBuilder(table, fetch) {
   };
 
   const update = async (values, options = {}) => {
-    const url = new URL(`rest/v1/${table}`, "http://placeholder");
-
-    // Add filters
-    if (queryFilters.length > 0) {
-      queryFilters.forEach((filter) => {
-        url.searchParams.append(
-          filter.column,
-          `${filter.operator}.${filter.value}`
-        );
+    if (queryFilters.length === 0) {
+      throw new ValidationError({
+        message: "WHERE filters required for UPDATE operations",
+        code: "missing_filters",
       });
     }
+
+    const url = new URL(`rest/v1/${table}`, "http://placeholder");
+
+    queryFilters.forEach((filter) => {
+      url.searchParams.append(
+        filter.column,
+        `${filter.operator}.${filter.value}`
+      );
+    });
 
     if (options.returning) {
       url.searchParams.append("select", options.returning);
@@ -846,28 +1117,29 @@ function createTableQueryBuilder(table, fetch) {
   };
 
   const delete_ = async (options = {}) => {
-    const url = new URL(`rest/v1/${table}`, "http://placeholder");
-
-    // Add filters
-    if (queryFilters.length > 0) {
-      queryFilters.forEach((filter) => {
-        url.searchParams.append(
-          filter.column,
-          `${filter.operator}.${filter.value}`
-        );
+    if (queryFilters.length === 0) {
+      throw new ValidationError({
+        message: "WHERE filters required for DELETE operations",
+        code: "missing_filters",
       });
     }
+
+    const url = new URL(`rest/v1/${table}`, "http://placeholder");
+
+    queryFilters.forEach((filter) => {
+      url.searchParams.append(
+        filter.column,
+        `${filter.operator}.${filter.value}`
+      );
+    });
 
     if (options.returning) {
       url.searchParams.append("select", options.returning);
     }
 
-    return fetch(url.pathname + url.search, {
-      method: "DELETE",
-    });
+    return fetch(url.pathname + url.search, { method: "DELETE" });
   };
 
-  // Construct and return the builder object
   const builder = {
     eq,
     neq,
@@ -878,6 +1150,7 @@ function createTableQueryBuilder(table, fetch) {
     like,
     ilike,
     in: in_,
+    is: is_,
     select,
     limit,
     offset,
@@ -893,10 +1166,16 @@ function createTableQueryBuilder(table, fetch) {
 }
 
 /**
- * RPC (Remote Procedure Call) Implementation
- * For calling stored procedures
+ * RPC Implementation
  */
 function callStoredProcedure(fn, params, fetch) {
+  if (!fn) {
+    throw new ValidationError({
+      message: "Function name is required",
+      code: "missing_function_name",
+    });
+  }
+
   return fetch(`rest/v1/rpc/${fn}`, {
     method: "POST",
     body: JSON.stringify(params || {}),
@@ -904,20 +1183,20 @@ function callStoredProcedure(fn, params, fetch) {
 }
 
 /**
- * Error classes
+ * Enhanced Error Classes
  */
 class SaintCentralError extends Error {
   constructor(error) {
-    super(error.message);
+    super(error.message || "Unknown error");
     this.name = "SaintCentralError";
-    this.originalError = error;
     this.code = error.code || "unknown";
+    this.status = error.status || null;
     this.details = error.details || null;
     this.hint = error.hint || null;
+    this.originalError = error.originalError || error;
   }
 }
 
-// Specific error types
 class AuthError extends SaintCentralError {
   constructor(error) {
     super(error);
@@ -925,19 +1204,65 @@ class AuthError extends SaintCentralError {
   }
 }
 
-class DatabaseError extends SaintCentralError {
+class ValidationError extends SaintCentralError {
   constructor(error) {
     super(error);
-    this.name = "DatabaseError";
+    this.name = "ValidationError";
   }
 }
 
-class StorageError extends SaintCentralError {
+class NetworkError extends SaintCentralError {
   constructor(error) {
     super(error);
-    this.name = "StorageError";
+    this.name = "NetworkError";
+  }
+}
+
+class RateLimitError extends SaintCentralError {
+  constructor(error) {
+    super(error);
+    this.name = "RateLimitError";
+    this.retryAfter = error.retryAfter || 60000;
+  }
+}
+
+class PermissionError extends SaintCentralError {
+  constructor(error) {
+    super(error);
+    this.name = "PermissionError";
+  }
+}
+
+class NotFoundError extends SaintCentralError {
+  constructor(error) {
+    super(error);
+    this.name = "NotFoundError";
+  }
+}
+
+class ConflictError extends SaintCentralError {
+  constructor(error) {
+    super(error);
+    this.name = "ConflictError";
+  }
+}
+
+class ServerError extends SaintCentralError {
+  constructor(error) {
+    super(error);
+    this.name = "ServerError";
   }
 }
 
 // Export everything
-export { SaintCentralError, AuthError, DatabaseError, StorageError };
+export {
+  SaintCentralError,
+  AuthError,
+  ValidationError,
+  NetworkError,
+  RateLimitError,
+  PermissionError,
+  NotFoundError,
+  ConflictError,
+  ServerError,
+};
