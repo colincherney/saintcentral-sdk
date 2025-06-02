@@ -38,37 +38,171 @@ export function createClient(url, options = {}) {
     maxRetries: 3,
     retryDelay: 1000,
     requestTimeout: 30000,
-    encryptionKey: options.encryptionKey || generateEncryptionKey(),
+    encryptionKey: null, // Will be set via key exchange
+    sessionId: null,
+    initialized: false,
     ...options.config,
   };
 
   // Local storage keys
   const STORAGE_KEY = "saint_central_auth";
-  const ENCRYPTION_KEY_STORAGE = "saint_central_encryption_key";
+  const SESSION_KEY_STORAGE = "saint_central_session";
 
-  // Initialize encryption key
-  const initializeEncryption = () => {
-    let key = config.encryptionKey;
+  // Secure key exchange with server
+  const performKeyExchange = async () => {
+    try {
+      console.log("🔄 Initiating secure key exchange...");
 
-    if (!key && typeof localStorage !== "undefined") {
+      const response = await fetch(`${apiUrl.origin}/auth/key-exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Request-ID": generateRequestId(),
+          "X-Client-Version": "2.0.0",
+        },
+        body: JSON.stringify({
+          clientInfo: {
+            userAgent: navigator.userAgent,
+            timestamp: Date.now(),
+            version: "2.0.0",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Key exchange failed: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error.message || "Key exchange failed");
+      }
+
+      const sessionData = {
+        sessionId: data.data.sessionId,
+        sessionKey: data.data.sessionKey,
+        algorithm: data.data.algorithm,
+        version: data.data.version,
+        expiresAt: data.data.expiresAt,
+        createdAt: Date.now(),
+      };
+
+      // Store session data
+      config.encryptionKey = sessionData.sessionKey;
+      config.sessionId = sessionData.sessionId;
+      config.initialized = true;
+
+      if (typeof localStorage !== "undefined") {
+        try {
+          localStorage.setItem(
+            SESSION_KEY_STORAGE,
+            JSON.stringify(sessionData)
+          );
+        } catch (error) {
+          console.warn("Could not store session data:", error);
+        }
+      }
+
+      console.log("🔒 Secure key exchange completed successfully");
+      return sessionData;
+    } catch (error) {
+      console.error("Key exchange failed:", error);
+      throw new SaintCentralError({
+        message: "Failed to establish secure connection",
+        code: "KEY_EXCHANGE_ERROR",
+        originalError: error,
+      });
+    }
+  };
+
+  // Initialize encryption with key exchange
+  const initializeEncryption = async () => {
+    if (config.initialized) {
+      return; // Already initialized
+    }
+
+    // Check if we have a valid stored session
+    if (typeof localStorage !== "undefined") {
       try {
-        key = localStorage.getItem(ENCRYPTION_KEY_STORAGE);
-        if (!key) {
-          key = generateEncryptionKey();
-          localStorage.setItem(ENCRYPTION_KEY_STORAGE, key);
+        const storedSession = localStorage.getItem(SESSION_KEY_STORAGE);
+        if (storedSession) {
+          const sessionData = JSON.parse(storedSession);
+
+          // Check if session is still valid (not expired)
+          if (sessionData.expiresAt && Date.now() < sessionData.expiresAt) {
+            config.encryptionKey = sessionData.sessionKey;
+            config.sessionId = sessionData.sessionId;
+            config.initialized = true;
+            console.log("🔒 Using existing valid session");
+            return sessionData;
+          } else {
+            // Session expired, remove it
+            localStorage.removeItem(SESSION_KEY_STORAGE);
+          }
         }
       } catch (error) {
-        console.warn("Could not access localStorage for encryption key");
-        key = generateEncryptionKey();
+        console.warn("Could not load stored session:", error);
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem(SESSION_KEY_STORAGE);
+        }
       }
     }
 
-    config.encryptionKey = key;
-    return key;
+    // No valid session found, perform key exchange
+    return await performKeyExchange();
   };
 
-  // Initialize encryption on first load
-  initializeEncryption();
+  // Auto-initialize if encryption is enabled
+  let initializationPromise = null;
+  if (securityOptions.encryption) {
+    initializationPromise = initializeEncryption().catch((error) => {
+      console.error("Failed to initialize encryption:", error);
+      // Don't throw here, let individual requests handle it
+    });
+  }
+
+  // Utility functions
+  const generateSecureNonce = () => {
+    const array = new Uint8Array(16);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
+  };
+
+  const generateRequestId = () => {
+    return `req_${Date.now()}_${crypto.randomUUID()}`;
+  };
+
+  const isRetryableError = (error) => {
+    return (
+      error.code === "NETWORK_ERROR" ||
+      error.code === "TIMEOUT" ||
+      (error.status >= 500 && error.status < 600)
+    );
+  };
+
+  const createErrorFromResponse = (errorData, status) => {
+    const errorMap = {
+      400: ValidationError,
+      401: AuthError,
+      403: PermissionError,
+      404: NotFoundError,
+      409: ConflictError,
+      422: ValidationError,
+      429: RateLimitError,
+      500: ServerError,
+    };
+
+    const ErrorClass = errorMap[status] || SaintCentralError;
+    return new ErrorClass({
+      ...errorData,
+      status,
+    });
+  };
 
   // Enhanced auth storage with encryption
   const getStoredAuth = () => {
@@ -236,6 +370,25 @@ export function createClient(url, options = {}) {
 
   // Enhanced fetch with automatic retry, rate limiting, and token refresh
   const fetchWithAuth = async (path, options = {}, retryCount = 0) => {
+    // Ensure encryption is initialized before making requests
+    if (securityOptions.encryption && !config.initialized) {
+      try {
+        console.log("⏳ Waiting for encryption initialization...");
+        if (initializationPromise) {
+          await initializationPromise;
+        } else {
+          await initializeEncryption();
+        }
+      } catch (error) {
+        console.error("Failed to initialize encryption:", error);
+        throw new SaintCentralError({
+          message: "Failed to establish secure connection",
+          code: "KEY_EXCHANGE_ERROR",
+          originalError: error,
+        });
+      }
+    }
+
     const authData = getStoredAuth();
 
     // Check if we need to refresh the token
@@ -263,6 +416,21 @@ export function createClient(url, options = {}) {
       signal: AbortSignal.timeout(config.requestTimeout),
     };
 
+    console.log("⏱️ Request timeout set to:", config.requestTimeout, "ms");
+    console.log("🌐 Request mode:", fetchOptions.mode);
+    console.log("🍪 Credentials:", fetchOptions.credentials);
+
+    // Add timeout debugging
+    const timeoutStart = Date.now();
+    fetchOptions.signal.addEventListener("abort", () => {
+      const timeoutDuration = Date.now() - timeoutStart;
+      console.error(
+        "⏰ Request aborted due to timeout after",
+        timeoutDuration,
+        "ms"
+      );
+    });
+
     // Enhanced security headers
     fetchOptions.headers = {
       "Content-Type": "application/json",
@@ -271,6 +439,11 @@ export function createClient(url, options = {}) {
       "X-Client-Version": "2.0.0",
       "User-Agent": "SaintCentral-SDK/2.0.0",
     };
+
+    // Add session ID if available
+    if (config.sessionId) {
+      fetchOptions.headers["X-Session-ID"] = config.sessionId;
+    }
 
     // Copy custom headers
     if (options.headers) {
@@ -287,17 +460,40 @@ export function createClient(url, options = {}) {
 
     // Handle body and encryption
     if (options.body) {
-      if (securityOptions.encryption && typeof options.body === "string") {
+      if (
+        securityOptions.encryption &&
+        typeof options.body === "string" &&
+        config.encryptionKey
+      ) {
         try {
+          console.log("🔒 Encrypting request body...");
+          console.log("🔑 Encryption key available:", !!config.encryptionKey);
+          console.log(
+            "📝 Body to encrypt:",
+            options.body.substring(0, 100) + "..."
+          );
+
           const bodyData = JSON.parse(options.body);
           const encryptedBody = await realEncryption.encrypt(bodyData);
           fetchOptions.body = JSON.stringify(encryptedBody);
           fetchOptions.headers["Content-Type"] = "application/encrypted+json";
+          console.log("🔒 Request payload encrypted successfully");
+          console.log("📦 Encrypted body length:", fetchOptions.body.length);
         } catch (error) {
-          console.warn("Encryption failed, sending unencrypted:", error);
-          fetchOptions.body = options.body;
+          console.error("❌ Encryption failed:", error);
+          console.error(
+            "🔑 Encryption key:",
+            config.encryptionKey ? "Present" : "Missing"
+          );
+          console.error("📝 Original body:", options.body);
+          throw new SaintCentralError({
+            message: "Failed to encrypt request payload",
+            code: "ENCRYPTION_ERROR",
+            originalError: error,
+          });
         }
       } else {
+        console.log("📝 Using unencrypted body");
         fetchOptions.body = options.body;
       }
     }
@@ -305,7 +501,22 @@ export function createClient(url, options = {}) {
     const endpoint = `${apiUrl.origin}/${path}`;
 
     try {
+      console.log("🌐 Making request to:", endpoint);
+      console.log("🔧 Request options:", {
+        method: fetchOptions.method,
+        headers: fetchOptions.headers,
+        bodyLength: fetchOptions.body ? fetchOptions.body.length : 0,
+        hasBody: !!fetchOptions.body,
+      });
+
       const response = await fetch(endpoint, fetchOptions);
+
+      console.log("📡 Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
 
       // Handle rate limiting
       if (response.status === 429) {
@@ -362,9 +573,13 @@ export function createClient(url, options = {}) {
         (path.startsWith("auth/signin") ||
           path.startsWith("auth/signup") ||
           path.startsWith("auth/token")) &&
-        data?.data?.session
+        data?.data
       ) {
-        storeAuth(data.data.session);
+        // Handle both direct session data and nested session data
+        const sessionData = data.data.session || data.data;
+        if (sessionData && (sessionData.access_token || sessionData.user)) {
+          storeAuth(sessionData);
+        }
       }
 
       // Handle sign out
@@ -390,17 +605,44 @@ export function createClient(url, options = {}) {
         throw error;
       }
 
+      // Enhanced error logging for debugging
+      console.error("Network request failed:", {
+        endpoint,
+        method: fetchOptions.method,
+        error: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
+        retryCount,
+        maxRetries: config.maxRetries,
+      });
+
       // Retry on network errors
       if (retryCount < config.maxRetries && isRetryableError(error)) {
         const delay = config.retryDelay * Math.pow(2, retryCount);
+        console.log(
+          `Retrying request in ${delay}ms (attempt ${retryCount + 1}/${
+            config.maxRetries
+          })`
+        );
         await new Promise((resolve) => setTimeout(resolve, delay));
         return fetchWithAuth(path, options, retryCount + 1);
       }
 
-      throw new NetworkError({
+      // Create more detailed error for network failures
+      const networkError = new NetworkError({
         message: error.message || "Network request failed",
+        code: "NETWORK_ERROR",
         originalError: error,
+        details: {
+          endpoint,
+          method: fetchOptions.method,
+          retryCount,
+          errorType: error.name,
+          timestamp: Date.now(),
+        },
       });
+
+      throw networkError;
     }
   };
 
@@ -434,46 +676,6 @@ export function createClient(url, options = {}) {
     }
 
     throw new AuthError({ message: "Invalid refresh response" });
-  };
-
-  // Utility functions
-  const generateSecureNonce = () => {
-    const array = new Uint8Array(16);
-    crypto.getRandomValues(array);
-    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
-      ""
-    );
-  };
-
-  const generateRequestId = () => {
-    return `req_${Date.now()}_${crypto.randomUUID()}`;
-  };
-
-  const isRetryableError = (error) => {
-    return (
-      error.code === "NETWORK_ERROR" ||
-      error.code === "TIMEOUT" ||
-      (error.status >= 500 && error.status < 600)
-    );
-  };
-
-  const createErrorFromResponse = (errorData, status) => {
-    const errorMap = {
-      400: ValidationError,
-      401: AuthError,
-      403: PermissionError,
-      404: NotFoundError,
-      409: ConflictError,
-      422: ValidationError,
-      429: RateLimitError,
-      500: ServerError,
-    };
-
-    const ErrorClass = errorMap[status] || SaintCentralError;
-    return new ErrorClass({
-      ...errorData,
-      status,
-    });
   };
 
   // Initialize all service clients
@@ -519,16 +721,85 @@ export function createClient(url, options = {}) {
     security: {
       configure: (newConfig) => Object.assign(securityOptions, newConfig),
       status: () => ({ ...securityOptions }),
-      rotateEncryptionKey: () => {
-        config.encryptionKey = generateEncryptionKey();
+      getEncryptionConfig: () => ({
+        encryptionEnabled: securityOptions.encryption,
+        sessionId: config.sessionId,
+        encryptionKey: config.encryptionKey
+          ? {
+              present: true,
+              length: config.encryptionKey.length,
+              preview: config.encryptionKey.substring(0, 8) + "...",
+              source: "key-exchange",
+            }
+          : null,
+        algorithm: "AES-256-GCM",
+        version: 2,
+      }),
+      refreshEncryption: async () => {
+        try {
+          const sessionData = await performKeyExchange();
+          return {
+            success: true,
+            sessionId: sessionData.sessionId,
+            expiresAt: sessionData.expiresAt,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error.message,
+          };
+        }
+      },
+      testKeyExchange: async (testData) => {
+        try {
+          // Clear existing session to force new key exchange
+          config.encryptionKey = null;
+          config.sessionId = null;
+
+          // Perform key exchange
+          const sessionData = await performKeyExchange();
+
+          // Test encryption with new key
+          const encrypted = await realEncryption.encrypt(testData);
+          const decrypted = await realEncryption.decrypt(encrypted);
+
+          return {
+            success: true,
+            sessionData: {
+              sessionId: sessionData.sessionId,
+              algorithm: sessionData.algorithm,
+              version: sessionData.version,
+              expiresAt: sessionData.expiresAt,
+            },
+            encryptionTest: {
+              original: testData,
+              encrypted: {
+                version: encrypted.version,
+                algorithm: encrypted.algorithm,
+                dataLength: encrypted.data.length,
+              },
+              decrypted: decrypted,
+              successful:
+                JSON.stringify(testData) === JSON.stringify(decrypted),
+            },
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error.message,
+          };
+        }
+      },
+      clearSession: () => {
+        config.encryptionKey = null;
+        config.sessionId = null;
         if (typeof localStorage !== "undefined") {
           try {
-            localStorage.setItem(ENCRYPTION_KEY_STORAGE, config.encryptionKey);
+            localStorage.removeItem(SESSION_KEY_STORAGE);
           } catch (error) {
-            console.warn("Could not store new encryption key");
+            console.warn("Could not clear session data");
           }
         }
-        return config.encryptionKey;
       },
     },
 
@@ -559,6 +830,80 @@ export function createClient(url, options = {}) {
       encrypt: realEncryption.encrypt,
       decrypt: realEncryption.decrypt,
       refreshToken,
+      ready: async () => {
+        if (securityOptions.encryption && !config.initialized) {
+          if (initializationPromise) {
+            await initializationPromise;
+          } else {
+            await initializeEncryption();
+          }
+        }
+        return {
+          ready: true,
+          encrypted: securityOptions.encryption,
+          sessionId: config.sessionId,
+          initialized: config.initialized,
+        };
+      },
+      testConnectivity: async () => {
+        try {
+          console.log("Testing basic connectivity to:", apiUrl.origin);
+
+          // Test 1: Basic health check
+          const healthResponse = await fetch(`${apiUrl.origin}/`, {
+            method: "GET",
+            headers: {
+              "X-Request-ID": generateRequestId(),
+            },
+          });
+
+          const healthData = await healthResponse.json();
+          console.log("Health check response:", healthData);
+
+          // Test 2: Test auth endpoint specifically
+          const authTestResponse = await fetch(
+            `${apiUrl.origin}/auth/key-exchange`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Request-ID": generateRequestId(),
+              },
+              body: JSON.stringify({
+                clientInfo: {
+                  userAgent: "connectivity-test",
+                  timestamp: Date.now(),
+                  version: "2.0.0",
+                },
+              }),
+            }
+          );
+
+          const authTestData = await authTestResponse.json();
+          console.log("Auth endpoint test response:", authTestData);
+
+          return {
+            success: true,
+            healthCheck: {
+              status: healthResponse.status,
+              data: healthData,
+            },
+            authEndpoint: {
+              status: authTestResponse.status,
+              data: authTestData,
+            },
+            timestamp: Date.now(),
+          };
+        } catch (error) {
+          console.error("Connectivity test failed:", error);
+          return {
+            success: false,
+            error: error.message,
+            errorType: error.name,
+            timestamp: Date.now(),
+          };
+        }
+      },
     },
   };
 }
@@ -648,6 +993,137 @@ function createAuthClient(fetch, options) {
     });
   };
 
+  const testManualAuth = async (credentials) => {
+    try {
+      console.log("Testing manual auth - bypassing SDK encryption");
+
+      // Test 1: Direct fetch to auth endpoint without encryption
+      console.log("🧪 Test 1: Direct fetch without encryption");
+      const directResponse = await window.fetch(`${options.url}/auth/signin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Request-ID": `manual_${Date.now()}`,
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      console.log("Direct auth response status:", directResponse.status);
+      console.log(
+        "Direct auth response headers:",
+        Object.fromEntries(directResponse.headers.entries())
+      );
+
+      let directData;
+      try {
+        directData = await directResponse.json();
+        console.log("Direct auth response data:", directData);
+      } catch (parseError) {
+        console.error("Failed to parse direct auth response:", parseError);
+        directData = { error: "Failed to parse response" };
+      }
+
+      // Test 2: Test with the exact same headers and options as the SDK
+      console.log("🧪 Test 2: Mimicking SDK request exactly");
+      const sdkLikeResponse = await window.fetch(`${options.url}/auth/signin`, {
+        method: "POST",
+        credentials: "omit",
+        mode: "cors",
+        cache: "no-cache",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Security-Nonce": crypto.randomUUID(),
+          "X-Request-ID": `sdk_like_${Date.now()}`,
+          "X-Client-Version": "2.0.0",
+          "User-Agent": "SaintCentral-SDK/2.0.0",
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      console.log("SDK-like response status:", sdkLikeResponse.status);
+      let sdkLikeData;
+      try {
+        sdkLikeData = await sdkLikeResponse.json();
+        console.log("SDK-like response data:", sdkLikeData);
+      } catch (parseError) {
+        console.error("Failed to parse SDK-like response:", parseError);
+        sdkLikeData = { error: "Failed to parse response" };
+      }
+
+      // Test 3: Using SDK's fetchWithAuth but with encryption disabled temporarily
+      console.log("🧪 Test 3: SDK fetchWithAuth with encryption disabled");
+      const originalEncryption = options.securityOptions?.encryption;
+      if (options.securityOptions) {
+        options.securityOptions.encryption = false;
+      }
+
+      let sdkResult;
+      try {
+        sdkResult = await fetch("auth/signin", {
+          method: "POST",
+          body: JSON.stringify(credentials),
+        });
+        console.log("SDK auth result (no encryption):", sdkResult);
+      } catch (sdkError) {
+        console.error("SDK auth failed (no encryption):", sdkError);
+        sdkResult = { error: sdkError.message };
+      }
+
+      // Restore original encryption setting
+      if (options.securityOptions) {
+        options.securityOptions.encryption = originalEncryption;
+      }
+
+      return {
+        success: true,
+        directFetch: {
+          status: directResponse.status,
+          ok: directResponse.ok,
+          data: directData,
+        },
+        sdkLikeFetch: {
+          status: sdkLikeResponse.status,
+          ok: sdkLikeResponse.ok,
+          data: sdkLikeData,
+        },
+        sdkFetch: sdkResult,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error("Manual auth test failed:", error);
+      return {
+        success: false,
+        error: error.message,
+        errorType: error.name,
+        timestamp: Date.now(),
+      };
+    }
+  };
+
+  const testWithTimeout = async (credentials, timeoutMs = 60000) => {
+    try {
+      console.log(`🧪 Testing sign-in with ${timeoutMs}ms timeout...`);
+
+      // Temporarily change the timeout
+      const originalTimeout = config.requestTimeout;
+      config.requestTimeout = timeoutMs;
+
+      const result = await fetch("auth/signin", {
+        method: "POST",
+        body: JSON.stringify(credentials),
+      });
+
+      // Restore original timeout
+      config.requestTimeout = originalTimeout;
+
+      return result;
+    } catch (error) {
+      // Restore original timeout even on error
+      config.requestTimeout = originalTimeout;
+      throw error;
+    }
+  };
+
   const validateCredentials = (credentials, required) => {
     for (const field of required) {
       if (!credentials[field]) {
@@ -668,6 +1144,8 @@ function createAuthClient(fetch, options) {
     signOut,
     resetPasswordForEmail,
     signInWithOAuth,
+    testManualAuth,
+    testWithTimeout,
     signInWithGoogle: (opts) => signInWithOAuth("google", opts),
     signInWithFacebook: (opts) => signInWithOAuth("facebook", opts),
     signInWithGithub: (opts) => signInWithOAuth("github", opts),
@@ -1047,7 +1525,7 @@ function createTableQueryBuilder(table, fetch) {
   const lte = (column, value) => filter(column, "lte", value);
   const like = (column, value) => filter(column, "like", value);
   const ilike = (column, value) => filter(column, "ilike", value);
-  const in_ = (column, values) => filter(column, "in", `(${values.join(",")})`);
+  const in_ = (column, values) => filter(column, "in", values.join(","));
   const is_ = (column, value) => filter(column, "is", value);
 
   // Query options
@@ -1076,7 +1554,6 @@ function createTableQueryBuilder(table, fetch) {
   const get = async () => fetch(buildQueryUrl(), { method: "GET" });
 
   const insert = async (values, options = {}) => {
-    const body = Array.isArray(values) ? values : [values];
     const url = new URL(`rest/v1/${table}`, "http://placeholder");
 
     if (options.returning) {
@@ -1085,7 +1562,7 @@ function createTableQueryBuilder(table, fetch) {
 
     return fetch(url.pathname + url.search, {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify(values),
     });
   };
 

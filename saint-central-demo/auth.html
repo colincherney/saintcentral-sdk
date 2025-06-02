@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Basic Auth Test</title>
+    <title>Saint Central Auth Test</title>
     <style>
       body {
-        font-family: Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
         max-width: 600px;
-        margin: 50px auto;
+        margin: 0 auto;
         padding: 20px;
         background: #f5f5f5;
       }
@@ -16,7 +17,7 @@
       .container {
         background: white;
         padding: 30px;
-        border-radius: 8px;
+        border-radius: 12px;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
       }
 
@@ -26,514 +27,919 @@
         margin-bottom: 30px;
       }
 
-      h3 {
-        color: #555;
-        margin-bottom: 10px;
-        margin-top: 15px;
-      }
-
       .form-group {
-        margin-bottom: 15px;
+        margin-bottom: 20px;
       }
 
       label {
         display: block;
         margin-bottom: 5px;
-        font-weight: bold;
+        font-weight: 500;
         color: #555;
       }
 
       input {
         width: 100%;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
         font-size: 16px;
+        box-sizing: border-box;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: #007bff;
+      }
+
+      .button-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 20px 0;
       }
 
       button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
         background: #007bff;
         color: white;
-        padding: 12px 18px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        margin-right: 8px;
-        margin-bottom: 8px;
-        margin-top: 10px;
       }
 
-      .debug-section {
-        margin-top: 20px;
-        padding-top: 20px;
-        border-top: 1px solid #eee;
-      }
-
-      .debug-section h3 {
-        color: #666;
-        margin-bottom: 10px;
-      }
-
-      .debug-btn {
-        background: #28a745;
-      }
-
-      .debug-btn:hover {
-        background: #218838;
-      }
-
-      button:hover {
+      .btn-primary:hover {
         background: #0056b3;
       }
 
-      button:disabled {
-        background: #ccc;
-        cursor: not-allowed;
+      .btn-secondary {
+        background: #6c757d;
+        color: white;
       }
 
-      .result {
+      .btn-secondary:hover {
+        background: #545b62;
+      }
+
+      .btn-danger {
+        background: #dc3545;
+        color: white;
+        grid-column: span 2;
+      }
+
+      .btn-danger:hover {
+        background: #c82333;
+      }
+
+      .output {
         margin-top: 20px;
         padding: 15px;
-        border-radius: 4px;
+        border-radius: 6px;
         font-family: monospace;
+        font-size: 14px;
         white-space: pre-wrap;
+        min-height: 100px;
+        border: 2px solid #ddd;
       }
 
       .success {
         background: #d4edda;
-        border: 1px solid #c3e6cb;
+        border-color: #c3e6cb;
         color: #155724;
       }
 
       .error {
         background: #f8d7da;
-        border: 1px solid #f5c6cb;
+        border-color: #f5c6cb;
         color: #721c24;
       }
 
       .info {
         background: #d1ecf1;
-        border: 1px solid #bee5eb;
+        border-color: #bee5eb;
         color: #0c5460;
+      }
+
+      .status {
+        text-align: center;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 6px;
+        font-weight: 500;
+      }
+
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>🔐 Basic Auth Test</h1>
+      <h1>🔐 Saint Central Auth Test</h1>
 
-      <div class="form-group">
-        <label for="serverUrl">Server URL:</label>
-        <input
-          type="text"
-          id="serverUrl"
-          value="saint-central-api.colinmcherney.workers.dev"
-          placeholder="your-worker.workers.dev"
-        />
+      <div class="status info" style="margin-bottom: 20px">
+        🔒 <strong>Production Encryption</strong> - Secure key exchange with
+        session-specific AES-256-GCM encryption
+      </div>
+
+      <div
+        class="status"
+        style="
+          margin-bottom: 20px;
+          background: #d4edda;
+          border-color: #c3e6cb;
+          color: #155724;
+        "
+      >
+        ✅ <strong>Production Ready</strong> - Using secure key exchange
+        protocol with session-based encryption keys.
+      </div>
+
+      <div
+        class="status"
+        style="
+          margin-bottom: 20px;
+          background: #fff3cd;
+          border-color: #ffeaa7;
+          color: #856404;
+        "
+      >
+        🌐
+        <strong>Worker URL:</strong>
+        https://saint-central-api.colinmcherney.workers.dev
+        <br />
+        📝 <strong>Debug:</strong> Open browser DevTools (F12) → Console tab to
+        see detailed network logs
       </div>
 
       <div class="form-group">
-        <label for="email">Email:</label>
+        <label for="email">Email Address</label>
         <input
-          type="email"
           id="email"
-          value="test@example.com"
+          type="email"
           placeholder="test@example.com"
+          value="test@example.com"
         />
       </div>
 
       <div class="form-group">
-        <label for="password">Password:</label>
+        <label for="password">Password</label>
         <input
-          type="password"
           id="password"
-          value="TestPassword123!"
+          type="password"
           placeholder="Enter password"
+          value="TestPassword123!"
         />
       </div>
 
-      <div class="debug-section">
-        <h3>🔍 Debug Tests</h3>
-        <button class="debug-btn" onclick="testServer()">Test Server</button>
-        <button class="debug-btn" onclick="testDirectSignIn()">
-          Direct Sign In
+      <div class="button-group">
+        <button class="btn-primary" onclick="signUp()">Sign Up</button>
+        <button class="btn-primary" onclick="signIn()">Sign In</button>
+        <button class="btn-secondary" onclick="getSession()">
+          Get Session
         </button>
-        <button class="debug-btn" onclick="testWithEncryption()">
-          Test Encryption
+        <button class="btn-secondary" onclick="refreshSession()">
+          Refresh Token
         </button>
-        <button class="debug-btn" onclick="compareRequests()">
-          Compare Requests
+        <button
+          class="btn-secondary"
+          onclick="testEncryption()"
+          style="grid-column: span 2"
+        >
+          🔒 Test Encryption
         </button>
+        <button
+          class="btn-secondary"
+          onclick="testKeyExchange()"
+          style="grid-column: span 2"
+        >
+          🔑 Test Key Exchange
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testConnectivity()"
+          style="grid-column: span 2"
+        >
+          🌐 Test Connectivity
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testManualAuth()"
+          style="grid-column: span 2"
+        >
+          🔧 Manual Auth Test
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testEncryptedVsUnencrypted()"
+          style="grid-column: span 2"
+        >
+          🔐 Test Encrypted vs Unencrypted
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testWithLongerTimeout()"
+          style="grid-column: span 2"
+        >
+          ⏱️ Test with Longer Timeout
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="debugEncryption()"
+          style="grid-column: span 2"
+        >
+          🔍 Debug Encryption Config
+        </button>
+        <button class="btn-danger" onclick="signOut()">Sign Out</button>
       </div>
 
-      <h3>🔐 Auth Tests</h3>
-      <button onclick="testSignUp()">Sign Up</button>
-      <button onclick="testSignIn()">Sign In</button>
-      <button onclick="testSignOut()">Sign Out</button>
-      <button onclick="getSession()">Get Session</button>
-
-      <div id="result"></div>
+      <div id="status" class="status"></div>
+      <div id="output" class="output info">Ready to test authentication...</div>
     </div>
 
     <script type="module">
       import { createClient } from "./src/sdk.js";
 
-      let client = null;
-
-      function showResult(message, type = "info") {
-        const resultDiv = document.getElementById("result");
-        resultDiv.className = "result " + type;
-        resultDiv.textContent = message;
-      }
-
-      function getConfig() {
-        let serverUrl = document.getElementById("serverUrl").value.trim();
-        if (!serverUrl.startsWith("http")) {
-          serverUrl = "https://" + serverUrl;
+      // Initialize client with your worker URL
+      const client = createClient(
+        "https://saint-central-api.colinmcherney.workers.dev",
+        {
+          security: {
+            encryption: true,
+            rateLimit: true,
+            jwtHardening: true,
+            headerSecurity: true,
+            autoTokenRefresh: true,
+          },
+          config: {
+            requestTimeout: 15000,
+            maxRetries: 3,
+            retryDelay: 1000,
+          },
         }
+      );
 
-        return {
-          serverUrl,
-          email: document.getElementById("email").value,
-          password: document.getElementById("password").value,
-        };
+      const $ = (id) => document.getElementById(id);
+
+      function setStatus(message, type = "info") {
+        const status = $("status");
+        status.textContent = message;
+        status.className = `status ${type}`;
       }
 
-      function initializeClient() {
-        const config = getConfig();
-        try {
-          // Try with encryption disabled first
-          client = createClient(config.serverUrl, {
-            security: {
-              encryption: false, // Disable encryption
-              rateLimit: true,
-              jwtHardening: true,
-              ddosProtection: true,
-              headerSecurity: true,
-              contentSecurityPolicy: true,
-              autoTokenRefresh: true,
+      function log(data, type = "info") {
+        const output = $("output");
+        output.className = `output ${type}`;
+
+        if (typeof data === "object") {
+          // Enhanced logging for debugging encryption issues
+          const logData = {
+            timestamp: new Date().toISOString(),
+            ...data,
+          };
+          output.textContent = JSON.stringify(logData, null, 2);
+        } else {
+          output.textContent = `[${new Date().toISOString()}] ${data}`;
+        }
+      }
+
+      function handleError(error, operation) {
+        console.error(`${operation} error:`, error);
+
+        // Enhanced error handling for encryption issues
+        if (error.code === "DECRYPTION_ERROR") {
+          setStatus(`${operation} failed - Server decryption error`, "error");
+          log(
+            {
+              operation,
+              error: "Server failed to decrypt the request",
+              message: error.message,
+              details: error.details,
+              suggestion:
+                "Client and server may be using different encryption keys",
             },
-          });
-          showResult(
-            "✅ SDK client initialized (encryption disabled)\nServer: " +
-              config.serverUrl,
-            "success"
-          );
-          return true;
-        } catch (error) {
-          showResult(
-            "❌ Failed to initialize client:\n" + error.message,
             "error"
           );
-          return false;
+        } else if (error.code === "ENCRYPTION_ERROR") {
+          setStatus(`${operation} failed - Client encryption error`, "error");
+          log(
+            {
+              operation,
+              error: "Client failed to encrypt the request",
+              message: error.message,
+              suggestion: "Check if encryption keys are properly configured",
+            },
+            "error"
+          );
+        } else if (error.code === "NETWORK_ERROR") {
+          setStatus(`${operation} failed - Network error`, "error");
+          log(
+            {
+              operation,
+              error: "Network request failed",
+              message: error.message,
+              suggestion: "Check your internet connection and server URL",
+            },
+            "error"
+          );
+        } else if (error.code === "TIMEOUT") {
+          setStatus(`${operation} failed - Request timeout`, "error");
+          log(
+            {
+              operation,
+              error: "Request timed out",
+              message: error.message,
+              suggestion:
+                "Server may be slow or encryption is taking longer than expected",
+            },
+            "error"
+          );
+        } else {
+          setStatus(`${operation} failed`, "error");
+          log(
+            {
+              operation,
+              error: error.message || "Unknown error",
+              code: error.code,
+              status: error.status,
+              details: error.details,
+            },
+            "error"
+          );
         }
       }
 
-      // Compare what SDK sends vs direct fetch
-      window.compareRequests = async function () {
-        const config = getConfig();
-        showResult("🔄 Comparing SDK vs Direct requests...", "info");
+      function setLoading(loading) {
+        document.body.classList.toggle("loading", loading);
+      }
 
-        // Intercept fetch to see what SDK actually sends
-        const originalFetch = window.fetch;
-        let sdkRequest = null;
-
-        window.fetch = function (url, options) {
-          if (url.includes("/auth/signin")) {
-            sdkRequest = {
-              url: url,
-              method: options.method,
-              headers: Object.fromEntries(
-                Object.entries(options.headers || {})
-              ),
-              body: options.body,
-            };
-          }
-          return originalFetch.apply(this, arguments);
-        };
-
+      async function signUp() {
         try {
-          if (!initializeClient()) return;
+          setLoading(true);
+          setStatus("Ensuring secure connection...", "info");
 
-          // Try SDK request (will be intercepted)
+          // Ensure client is ready
+          await client.utils.ready();
+
+          setStatus("Creating account with encrypted payload...", "info");
+
+          const email = $("email").value;
+          const password = $("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          const { data, error } = await client.auth.signUp({
+            email,
+            password,
+          });
+
+          if (error) {
+            handleError(error, "Sign Up");
+          } else {
+            setStatus("Account created successfully!", "success");
+            log(
+              {
+                operation: "Sign Up",
+                status: "success",
+                user: data?.user,
+                session: data?.session
+                  ? "Session created"
+                  : "No session (check email for confirmation)",
+                encryption: "Payload was encrypted",
+              },
+              "success"
+            );
+          }
+        } catch (err) {
+          handleError(err, "Sign Up");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function signIn() {
+        try {
+          setLoading(true);
+          setStatus("Ensuring secure connection...", "info");
+
+          // Ensure client is ready
+          const readyStatus = await client.utils.ready();
+          console.log("Client ready status:", readyStatus);
+
+          setStatus("Signing in with encrypted credentials...", "info");
+
+          const email = $("email").value;
+          const password = $("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          console.log("Attempting sign in with:", {
+            email,
+            passwordLength: password.length,
+          });
+          console.log("Client session ID:", readyStatus.sessionId);
+          console.log(
+            "Client encryption config:",
+            client.security.getEncryptionConfig()
+          );
+
+          // Add detailed logging before the actual request
+          console.log("About to call client.auth.signInWithPassword...");
+
+          const { data, error } = await client.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          console.log("Sign in response:", { data, error });
+
+          if (error) {
+            handleError(error, "Sign In");
+          } else {
+            setStatus("Signed in successfully!", "success");
+            log(
+              {
+                operation: "Sign In",
+                status: "success",
+                user: {
+                  id: data?.user?.id,
+                  email: data?.user?.email,
+                  created_at: data?.user?.created_at,
+                },
+                session: {
+                  access_token: data?.access_token ? "Present" : "Missing",
+                  refresh_token: data?.refresh_token ? "Present" : "Missing",
+                  expires_at: data?.expires_at,
+                },
+                encryption: "Credentials were encrypted",
+              },
+              "success"
+            );
+          }
+        } catch (err) {
+          console.error("Sign in error details:", err);
+          console.error("Error stack:", err.stack);
+
+          // Enhanced error logging
+          if (err.originalError) {
+            console.error("Original error:", err.originalError);
+          }
+
+          // Log the exact error details
+          console.error("Error properties:", {
+            name: err.name,
+            message: err.message,
+            code: err.code,
+            status: err.status,
+            details: err.details,
+          });
+
+          handleError(err, "Sign In");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function signOut() {
+        try {
+          setLoading(true);
+          setStatus("Signing out...", "info");
+
+          const { error } = await client.auth.signOut();
+
+          if (error) {
+            handleError(error, "Sign Out");
+          } else {
+            setStatus("Signed out successfully", "success");
+            log(
+              {
+                operation: "Sign Out",
+                status: "success",
+                message: "Successfully signed out",
+              },
+              "success"
+            );
+          }
+        } catch (err) {
+          handleError(err, "Sign Out");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function getSession() {
+        try {
+          setLoading(true);
+          setStatus("Checking session...", "info");
+
+          const { data, error } = await client.auth.getSession();
+
+          if (error) {
+            handleError(error, "Get Session");
+          } else if (data?.session) {
+            setStatus("Active session found", "success");
+            log(
+              {
+                operation: "Get Session",
+                status: "success",
+                user: {
+                  id: data.session.user?.id,
+                  email: data.session.user?.email,
+                  last_sign_in: data.session.user?.last_sign_in_at,
+                },
+                session: {
+                  expires_at: data.session.expires_at,
+                  token_type: data.session.token_type,
+                },
+              },
+              "success"
+            );
+          } else {
+            setStatus("No active session", "info");
+            log(
+              {
+                operation: "Get Session",
+                status: "no_session",
+                message: "No active session found",
+              },
+              "info"
+            );
+          }
+        } catch (err) {
+          handleError(err, "Get Session");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function refreshSession() {
+        try {
+          setLoading(true);
+          setStatus("Refreshing session...", "info");
+
+          const { data, error } = await client.auth.refreshSession();
+
+          if (error) {
+            handleError(error, "Refresh Session");
+          } else {
+            setStatus("Session refreshed successfully", "success");
+            log(
+              {
+                operation: "Refresh Session",
+                status: "success",
+                new_access_token: data?.access_token ? "Generated" : "Missing",
+                expires_at: data?.expires_at,
+              },
+              "success"
+            );
+          }
+        } catch (err) {
+          handleError(err, "Refresh Session");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function testEncryption() {
+        try {
+          setLoading(true);
+          setStatus("Ensuring client is ready...", "info");
+
+          // Ensure client is ready
+          await client.utils.ready();
+
+          setStatus("Testing encryption utilities...", "info");
+
+          const testData = {
+            message: "Hello, Saint Central!",
+            timestamp: Date.now(),
+            email: $("email").value,
+          };
+
+          // Test encryption
+          const encrypted = await client.utils.encrypt(testData);
+
+          // Test decryption
+          const decrypted = await client.utils.decrypt(encrypted);
+
+          setStatus("Encryption test successful!", "success");
+          log(
+            {
+              operation: "Test Encryption",
+              status: "success",
+              original_data: testData,
+              encrypted_format: {
+                version: encrypted.version,
+                algorithm: encrypted.algorithm,
+                encrypted: encrypted.encrypted,
+                data_length: encrypted.data.length,
+              },
+              decrypted_data: decrypted,
+              encryption_working:
+                JSON.stringify(testData) === JSON.stringify(decrypted),
+            },
+            "success"
+          );
+        } catch (err) {
+          handleError(err, "Test Encryption");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function testKeyExchange() {
+        try {
+          setLoading(true);
+          setStatus("Testing key exchange...", "info");
+
+          const testData = {
+            message: "Hello, Saint Central!",
+            timestamp: Date.now(),
+            email: $("email").value,
+          };
+
+          // Test key exchange
+          const keyExchangeResult = await client.security.testKeyExchange(
+            testData
+          );
+
+          setStatus("Key exchange test successful!", "success");
+          log(
+            {
+              operation: "Test Key Exchange",
+              status: "success",
+              original_data: testData,
+              key_exchange_result: keyExchangeResult,
+            },
+            "success"
+          );
+        } catch (err) {
+          handleError(err, "Test Key Exchange");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function testConnectivity() {
+        try {
+          setLoading(true);
+          setStatus("Testing connectivity...", "info");
+
+          // Test basic connectivity first
+          console.log("Testing basic connectivity to worker...");
+
           try {
-            await client.auth.signIn({
-              email: config.email,
-              password: config.password,
-            });
-          } catch (error) {
-            // We expect this might fail, we just want to see the request
-          }
-
-          // Restore original fetch
-          window.fetch = originalFetch;
-
-          // Show comparison
-          const directRequest = {
-            url: config.serverUrl + "/auth/signin",
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              email: config.email,
-              password: config.password,
-            }),
-          };
-
-          let comparison =
-            "📤 DIRECT REQUEST (WORKS):\n" +
-            JSON.stringify(directRequest, null, 2);
-          comparison +=
-            "\n\n📦 SDK REQUEST (FAILS):\n" +
-            JSON.stringify(sdkRequest, null, 2);
-
-          if (sdkRequest) {
-            comparison += "\n\n🔍 DIFFERENCES:";
-
-            // Check headers
-            const sdkHeaders = sdkRequest.headers;
-            const directHeaders = directRequest.headers;
-
-            Object.keys(sdkHeaders).forEach((header) => {
-              if (!directHeaders[header]) {
-                comparison +=
-                  "\n• SDK adds header: " + header + ": " + sdkHeaders[header];
+            const basicResponse = await fetch(
+              "https://saint-central-api.colinmcherney.workers.dev/",
+              {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                },
               }
-            });
+            );
 
-            // Check content type
-            if (sdkHeaders["Content-Type"] !== directHeaders["Content-Type"]) {
-              comparison +=
-                "\n• Content-Type differs: SDK=" +
-                sdkHeaders["Content-Type"] +
-                ", Direct=" +
-                directHeaders["Content-Type"];
-            }
+            console.log("Basic response status:", basicResponse.status);
+            console.log(
+              "Basic response headers:",
+              Object.fromEntries(basicResponse.headers.entries())
+            );
 
-            // Check body
-            if (sdkRequest.body !== directRequest.body) {
-              comparison += "\n• Body differs (SDK may be encrypting)";
+            if (basicResponse.ok) {
+              const basicData = await basicResponse.json();
+              console.log("Basic response data:", basicData);
+            } else {
+              console.error("Basic response not OK:", basicResponse.statusText);
             }
+          } catch (basicError) {
+            console.error("Basic connectivity test failed:", basicError);
+            throw new Error(`Basic connectivity failed: ${basicError.message}`);
           }
 
-          showResult(comparison, "info");
-        } catch (error) {
-          window.fetch = originalFetch;
-          showResult("❌ Comparison failed:\n" + error.message, "error");
-        }
-      };
+          // Test using the SDK's connectivity test
+          const connectivityResult = await client.utils.testConnectivity();
+          console.log("SDK connectivity result:", connectivityResult);
 
-      // Debug function to test direct fetch
-      window.testDirectSignIn = async function () {
-        const config = getConfig();
-        showResult("🔄 Testing direct fetch sign in...", "info");
-
-        try {
-          const requestBody = {
-            email: config.email,
-            password: config.password,
-          };
-
-          showResult(
-            "📤 Sending request:\nURL: " +
-              config.serverUrl +
-              "/auth/signin\nBody: " +
-              JSON.stringify(requestBody, null, 2),
-            "info"
-          );
-
-          const response = await fetch(config.serverUrl + "/auth/signin", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
+          setStatus("Connectivity test successful!", "success");
+          log(
+            {
+              operation: "Test Connectivity",
+              status: "success",
+              result: connectivityResult,
             },
-            body: JSON.stringify(requestBody),
+            "success"
+          );
+        } catch (err) {
+          console.error("Connectivity test error:", err);
+          handleError(err, "Test Connectivity");
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      async function testManualAuth() {
+        try {
+          setLoading(true);
+          setStatus("Testing manual authentication...", "info");
+
+          const email = $("email").value;
+          const password = $("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          console.log("Attempting manual authentication with:", {
+            email,
+            passwordLength: password.length,
           });
 
-          const responseText = await response.text();
+          const manualAuthResult = await client.auth.testManualAuth({
+            email,
+            password,
+          });
 
-          showResult(
-            "📥 Response received:\nStatus: " +
-              response.status +
-              " " +
-              response.statusText +
-              "\nHeaders: " +
-              JSON.stringify(
-                Object.fromEntries(response.headers.entries()),
-                null,
-                2
-              ) +
-              "\nBody: " +
-              responseText,
-            response.ok ? "success" : "error"
-          );
-        } catch (error) {
-          showResult("❌ Direct fetch failed:\n" + error.message, "error");
-        }
-      };
-
-      // Test with encryption enabled
-      window.testWithEncryption = async function () {
-        const config = getConfig();
-        showResult("🔄 Testing SDK with encryption enabled...", "info");
-
-        try {
-          const encryptedClient = createClient(config.serverUrl, {
-            security: {
-              encryption: true, // Enable encryption
+          setStatus("Manual authentication test successful!", "success");
+          log(
+            {
+              operation: "Test Manual Auth",
+              status: "success",
+              result: manualAuthResult,
             },
-          });
-
-          const response = await encryptedClient.auth.signIn({
-            email: config.email,
-            password: config.password,
-          });
-
-          showResult(
-            "✅ Sign In with Encryption Success!\n" +
-              JSON.stringify(response, null, 2),
             "success"
           );
-        } catch (error) {
-          showResult(
-            "❌ Sign In with Encryption Failed:\n" +
-              error.name +
-              ": " +
-              error.message +
-              "\n\nThis suggests the server may not support encrypted requests",
-            "error"
-          );
+        } catch (err) {
+          handleError(err, "Test Manual Auth");
+        } finally {
+          setLoading(false);
         }
-      };
+      }
 
-      window.testSignUp = async function () {
-        if (!initializeClient()) return;
-
-        const config = getConfig();
-        showResult("🔄 Testing sign up...", "info");
-
+      async function testEncryptedVsUnencrypted() {
         try {
-          const response = await client.auth.signUp({
-            email: config.email,
-            password: config.password,
-          });
+          setLoading(true);
+          setStatus("Testing encrypted vs unencrypted sign-in...", "info");
 
-          showResult(
-            "✅ Sign Up Success!\n" + JSON.stringify(response, null, 2),
+          const email = $("email").value;
+          const password = $("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          // Test 1: With encryption enabled (current state)
+          console.log("🔒 Test 1: Attempting sign-in WITH encryption...");
+          let encryptedResult;
+          try {
+            encryptedResult = await client.auth.signInWithPassword({
+              email,
+              password,
+            });
+            console.log("✅ Encrypted sign-in result:", encryptedResult);
+          } catch (encryptedError) {
+            console.error("❌ Encrypted sign-in failed:", encryptedError);
+            encryptedResult = { error: encryptedError.message };
+          }
+
+          // Test 2: Temporarily disable encryption
+          console.log("🔓 Test 2: Attempting sign-in WITHOUT encryption...");
+          const originalEncryption = client.security.status().encryption;
+          client.security.configure({ encryption: false });
+
+          let unencryptedResult;
+          try {
+            unencryptedResult = await client.auth.signInWithPassword({
+              email,
+              password,
+            });
+            console.log("✅ Unencrypted sign-in result:", unencryptedResult);
+          } catch (unencryptedError) {
+            console.error("❌ Unencrypted sign-in failed:", unencryptedError);
+            unencryptedResult = { error: unencryptedError.message };
+          }
+
+          // Restore original encryption setting
+          client.security.configure({ encryption: originalEncryption });
+
+          setStatus(
+            "Encrypted vs unencrypted comparison completed!",
             "success"
           );
-        } catch (error) {
-          showResult(
-            "❌ Sign Up Failed:\n" +
-              error.name +
-              ": " +
-              error.message +
-              "\n\nFull error: " +
-              JSON.stringify(error, null, 2),
-            "error"
+          log(
+            {
+              operation: "Test Encrypted vs Unencrypted",
+              status: "completed",
+              encrypted_result: encryptedResult,
+              unencrypted_result: unencryptedResult,
+              comparison: {
+                encrypted_success: !encryptedResult.error,
+                unencrypted_success: !unencryptedResult.error,
+                issue_is_encryption:
+                  !encryptedResult.error && !!unencryptedResult.error,
+              },
+            },
+            "success"
           );
+        } catch (err) {
+          handleError(err, "Test Encrypted vs Unencrypted");
+        } finally {
+          setLoading(false);
         }
-      };
+      }
 
-      window.testSignIn = async function () {
-        if (!initializeClient()) return;
-
-        const config = getConfig();
-        showResult("🔄 Testing sign in...", "info");
-
+      async function testWithLongerTimeout() {
         try {
-          const response = await client.auth.signIn({
-            email: config.email,
-            password: config.password,
-          });
+          setLoading(true);
+          setStatus("Testing sign-in with a longer timeout...", "info");
 
-          showResult(
-            "✅ Sign In Success!\n" + JSON.stringify(response, null, 2),
+          const email = $("email").value;
+          const password = $("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          console.log("Attempting sign-in with 60-second timeout...");
+
+          const longerTimeoutResult = await client.auth.testWithTimeout(
+            {
+              email,
+              password,
+            },
+            60000
+          ); // 60 seconds
+
+          setStatus("Sign-in with longer timeout completed!", "success");
+          log(
+            {
+              operation: "Test with Longer Timeout",
+              status: "success",
+              result: longerTimeoutResult,
+            },
             "success"
           );
-        } catch (error) {
-          showResult(
-            "❌ Sign In Failed:\n" +
-              error.name +
-              ": " +
-              error.message +
-              "\n\nFull error: " +
-              JSON.stringify(error, null, 2),
-            "error"
-          );
+        } catch (err) {
+          handleError(err, "Test with Longer Timeout");
+        } finally {
+          setLoading(false);
         }
-      };
+      }
 
-      window.testSignOut = async function () {
-        if (!initializeClient()) return;
-
-        showResult("🔄 Testing sign out...", "info");
-
+      async function debugEncryption() {
         try {
-          const response = await client.auth.signOut();
-          showResult(
-            "✅ Sign Out Success!\n" + JSON.stringify(response, null, 2),
+          setLoading(true);
+          setStatus("Getting encryption configuration...", "info");
+
+          const config = await client.security.getEncryptionConfig();
+
+          setStatus(
+            "Encryption configuration retrieved successfully!",
             "success"
           );
-        } catch (error) {
-          showResult(
-            "❌ Sign Out Failed:\n" + error.name + ": " + error.message,
-            "error"
-          );
-        }
-      };
-
-      window.getSession = async function () {
-        if (!initializeClient()) return;
-
-        showResult("🔄 Getting session...", "info");
-
-        try {
-          const response = await client.auth.getSession();
-          showResult(
-            "✅ Session Retrieved!\n" + JSON.stringify(response, null, 2),
+          log(
+            {
+              operation: "Get Encryption Config",
+              status: "success",
+              config: config,
+            },
             "success"
           );
-        } catch (error) {
-          showResult(
-            "❌ Get Session Failed:\n" + error.name + ": " + error.message,
-            "error"
-          );
+        } catch (err) {
+          handleError(err, "Get Encryption Config");
+        } finally {
+          setLoading(false);
         }
-      };
+      }
 
-      // Test server health
-      window.testServer = async function () {
-        const config = getConfig();
-        showResult("🔄 Testing server health...", "info");
-
-        try {
-          const response = await fetch(config.serverUrl);
-          const data = await response.json();
-
-          showResult(
-            "✅ Server Health Check:\n" + JSON.stringify(data, null, 2),
-            "success"
-          );
-        } catch (error) {
-          showResult(
-            "❌ Server Health Check Failed:\n" + error.message,
-            "error"
-          );
-        }
-      };
-
-      // Auto-initialize on page load
-      document.addEventListener("DOMContentLoaded", () => {
-        showResult(
-          'Ready to test! First try "Test Server" to verify connection.',
-          "info"
-        );
+      // Auto-check session on load
+      window.addEventListener("load", () => {
+        setTimeout(getSession, 500);
       });
+
+      // Attach functions globally for buttons
+      window.signUp = signUp;
+      window.signIn = signIn;
+      window.signOut = signOut;
+      window.getSession = getSession;
+      window.refreshSession = refreshSession;
+      window.testEncryption = testEncryption;
+      window.testKeyExchange = testKeyExchange;
+      window.testConnectivity = testConnectivity;
+      window.testManualAuth = testManualAuth;
+      window.testEncryptedVsUnencrypted = testEncryptedVsUnencrypted;
+      window.testWithLongerTimeout = testWithLongerTimeout;
+      window.debugEncryption = debugEncryption;
     </script>
   </body>
 </html>

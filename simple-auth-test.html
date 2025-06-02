@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simple Auth Test - No SDK</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #555;
+      }
+      input {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
+        font-size: 16px;
+        box-sizing: border-box;
+      }
+      input:focus {
+        outline: none;
+        border-color: #007bff;
+      }
+      .button-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 20px 0;
+      }
+      button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-primary {
+        background: #007bff;
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #0056b3;
+      }
+      .btn-secondary {
+        background: #6c757d;
+        color: white;
+      }
+      .btn-secondary:hover {
+        background: #545b62;
+      }
+      .output {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 6px;
+        font-family: monospace;
+        font-size: 14px;
+        white-space: pre-wrap;
+        min-height: 100px;
+        border: 2px solid #ddd;
+      }
+      .success {
+        background: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+      }
+      .error {
+        background: #f8d7da;
+        border-color: #f5c6cb;
+        color: #721c24;
+      }
+      .info {
+        background: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+      }
+      .status {
+        text-align: center;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 6px;
+        font-weight: 500;
+      }
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 Simple Auth Test (No SDK)</h1>
+
+      <div class="status info">
+        Direct API calls to test authentication without the SDK complexity
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input
+          id="email"
+          type="email"
+          placeholder="test@example.com"
+          value="test@example.com"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          placeholder="Enter password"
+          value="TestPassword123!"
+        />
+      </div>
+
+      <div class="button-group">
+        <button class="btn-primary" onclick="testHealth()">Test Health</button>
+        <button class="btn-primary" onclick="testKeyExchange()">
+          Key Exchange
+        </button>
+        <button class="btn-primary" onclick="signUpDirect()">Sign Up</button>
+        <button class="btn-primary" onclick="signInDirect()">Sign In</button>
+        <button class="btn-secondary" onclick="signInEncrypted()">
+          Sign In (Encrypted)
+        </button>
+        <button
+          class="btn-secondary"
+          onclick="testEncryptedWithRegularContentType()"
+        >
+          Test Encrypted (JSON)
+        </button>
+        <button class="btn-secondary" onclick="getSession()">
+          Get Session
+        </button>
+      </div>
+
+      <div id="status" class="status"></div>
+      <div id="output" class="output info">
+        Ready to test direct API calls...
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "https://saint-central-api.colinmcherney.workers.dev";
+      let sessionKey = null;
+      let sessionId = null;
+      let authToken = null;
+
+      const $ = (id) => document.getElementById(id);
+
+      function setStatus(message, type = "info") {
+        const status = document.getElementById("status");
+        status.textContent = message;
+        status.className = `status ${type}`;
+      }
+
+      function log(data, type = "info") {
+        const output = document.getElementById("output");
+        output.className = `output ${type}`;
+
+        if (typeof data === "object") {
+          output.textContent = JSON.stringify(
+            {
+              timestamp: new Date().toISOString(),
+              ...data,
+            },
+            null,
+            2
+          );
+        } else {
+          output.textContent = `[${new Date().toISOString()}] ${data}`;
+        }
+      }
+
+      function setLoading(loading) {
+        document.body.classList.toggle("loading", loading);
+      }
+
+      // Test basic health endpoint
+      async function testHealth() {
+        try {
+          setLoading(true);
+          setStatus("Testing health endpoint...", "info");
+
+          const response = await fetch(API_URL, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            setStatus("Health check successful!", "success");
+            log(
+              {
+                operation: "Health Check",
+                status: "success",
+                response: data,
+              },
+              "success"
+            );
+          } else {
+            setStatus("Health check failed", "error");
+            log(
+              {
+                operation: "Health Check",
+                status: "error",
+                error: data,
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          setStatus("Health check failed", "error");
+          log(
+            {
+              operation: "Health Check",
+              status: "error",
+              error: error.message,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Test key exchange
+      async function testKeyExchange() {
+        try {
+          setLoading(true);
+          setStatus("Testing key exchange...", "info");
+
+          const response = await fetch(`${API_URL}/auth/key-exchange`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              clientInfo: {
+                userAgent: navigator.userAgent,
+                timestamp: Date.now(),
+                version: "1.0.0",
+              },
+            }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.data) {
+            sessionKey = result.data.sessionKey;
+            sessionId = result.data.sessionId;
+
+            setStatus("Key exchange successful!", "success");
+            log(
+              {
+                operation: "Key Exchange",
+                status: "success",
+                sessionId: sessionId,
+                sessionKey: sessionKey
+                  ? sessionKey.substring(0, 16) + "..."
+                  : null,
+                expiresAt: result.data.expiresAt,
+              },
+              "success"
+            );
+          } else {
+            setStatus("Key exchange failed", "error");
+            log(
+              {
+                operation: "Key Exchange",
+                status: "error",
+                error: result.error || "Unknown error",
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          setStatus("Key exchange failed", "error");
+          log(
+            {
+              operation: "Key Exchange",
+              status: "error",
+              error: error.message,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Direct sign up (unencrypted)
+      async function signUpDirect() {
+        try {
+          setLoading(true);
+          setStatus("Signing up (direct)...", "info");
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          const response = await fetch(`${API_URL}/auth/signup`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+              password: password,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.data) {
+            setStatus("Sign up successful!", "success");
+            log(
+              {
+                operation: "Sign Up (Direct)",
+                status: "success",
+                user: result.data.user,
+                session: result.data.session
+                  ? "Created"
+                  : "Check email for confirmation",
+              },
+              "success"
+            );
+          } else {
+            setStatus("Sign up failed", "error");
+            log(
+              {
+                operation: "Sign Up (Direct)",
+                status: "error",
+                error: result.error || "Unknown error",
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          setStatus("Sign up failed", "error");
+          log(
+            {
+              operation: "Sign Up (Direct)",
+              status: "error",
+              error: error.message,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Direct sign in (unencrypted)
+      async function signInDirect() {
+        try {
+          setLoading(true);
+          setStatus("Signing in (direct)...", "info");
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          const response = await fetch(`${API_URL}/auth/signin`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+              password: password,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.data) {
+            authToken = result.data.access_token;
+
+            setStatus("Sign in successful!", "success");
+            log(
+              {
+                operation: "Sign In (Direct)",
+                status: "success",
+                user: {
+                  id: result.data.user?.id,
+                  email: result.data.user?.email,
+                },
+                session: {
+                  access_token: result.data.access_token
+                    ? "Present"
+                    : "Missing",
+                  refresh_token: result.data.refresh_token
+                    ? "Present"
+                    : "Missing",
+                  expires_at: result.data.expires_at,
+                },
+              },
+              "success"
+            );
+          } else {
+            setStatus("Sign in failed", "error");
+            log(
+              {
+                operation: "Sign In (Direct)",
+                status: "error",
+                error: result.error || "Unknown error",
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          setStatus("Sign in failed", "error");
+          log(
+            {
+              operation: "Sign In (Direct)",
+              status: "error",
+              error: error.message,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Simple AES-GCM encryption
+      async function encryptData(data, key) {
+        const encoder = new TextEncoder();
+        const dataBuffer = encoder.encode(JSON.stringify(data));
+
+        // Generate a random IV
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+
+        // Convert hex key to buffer
+        const keyBuffer = new Uint8Array(
+          key.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+        );
+
+        // Import the key
+        const cryptoKey = await crypto.subtle.importKey(
+          "raw",
+          keyBuffer,
+          { name: "AES-GCM" },
+          false,
+          ["encrypt"]
+        );
+
+        // Encrypt the data
+        const encryptedBuffer = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          cryptoKey,
+          dataBuffer
+        );
+
+        // Combine IV and encrypted data
+        const result = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+        result.set(iv, 0);
+        result.set(new Uint8Array(encryptedBuffer), iv.length);
+
+        // Convert to base64
+        const base64 = btoa(String.fromCharCode(...result));
+
+        return {
+          version: 2,
+          algorithm: "aes-256-gcm",
+          data: base64,
+          encrypted: true,
+        };
+      }
+
+      // Sign in with encryption
+      async function signInEncrypted() {
+        try {
+          setLoading(true);
+          setStatus("Signing in (encrypted)...", "info");
+
+          if (!sessionKey) {
+            throw new Error(
+              "No session key available. Run Key Exchange first."
+            );
+          }
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          // Encrypt the credentials
+          console.log("🔒 Encrypting credentials...");
+          const credentials = { email, password };
+          const encryptedCredentials = await encryptData(
+            credentials,
+            sessionKey
+          );
+          console.log("🔒 Encrypted payload:", encryptedCredentials);
+
+          const headers = {
+            "Content-Type": "application/encrypted+json",
+          };
+
+          if (sessionId) {
+            headers["X-Session-ID"] = sessionId;
+          }
+
+          console.log("📡 Request headers:", headers);
+          console.log(
+            "📦 Request body length:",
+            JSON.stringify(encryptedCredentials).length
+          );
+
+          const response = await fetch(`${API_URL}/auth/signin`, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(encryptedCredentials),
+          });
+
+          console.log("📡 Response status:", response.status);
+          console.log(
+            "📡 Response headers:",
+            Object.fromEntries(response.headers.entries())
+          );
+
+          const result = await response.json();
+          console.log("📡 Response data:", result);
+
+          if (response.ok && result.data) {
+            authToken = result.data.access_token;
+
+            setStatus("Encrypted sign in successful!", "success");
+            log(
+              {
+                operation: "Sign In (Encrypted)",
+                status: "success",
+                user: {
+                  id: result.data.user?.id,
+                  email: result.data.user?.email,
+                },
+                session: {
+                  access_token: result.data.access_token
+                    ? "Present"
+                    : "Missing",
+                  refresh_token: result.data.refresh_token
+                    ? "Present"
+                    : "Missing",
+                  expires_at: result.data.expires_at,
+                },
+                encryption: "Used session-based AES-256-GCM",
+              },
+              "success"
+            );
+          } else {
+            setStatus("Encrypted sign in failed", "error");
+            log(
+              {
+                operation: "Sign In (Encrypted)",
+                status: "error",
+                error: result.error || "Unknown error",
+                response_status: response.status,
+                response_headers: Object.fromEntries(
+                  response.headers.entries()
+                ),
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("❌ Encrypted sign-in error:", error);
+          setStatus("Encrypted sign in failed", "error");
+          log(
+            {
+              operation: "Sign In (Encrypted)",
+              status: "error",
+              error: error.message,
+              error_type: error.name,
+              stack: error.stack,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Test encrypted sign-in with regular JSON content type
+      async function testEncryptedWithRegularContentType() {
+        try {
+          setLoading(true);
+          setStatus(
+            "Testing encrypted sign-in with JSON content type...",
+            "info"
+          );
+
+          if (!sessionKey) {
+            throw new Error(
+              "No session key available. Run Key Exchange first."
+            );
+          }
+
+          const email = document.getElementById("email").value;
+          const password = document.getElementById("password").value;
+
+          if (!email || !password) {
+            throw new Error("Please enter both email and password");
+          }
+
+          // Encrypt the credentials
+          console.log("🔒 Encrypting credentials (JSON content type)...");
+          const credentials = { email, password };
+          const encryptedCredentials = await encryptData(
+            credentials,
+            sessionKey
+          );
+          console.log("🔒 Encrypted payload:", encryptedCredentials);
+
+          // Use regular JSON content type instead of encrypted+json
+          const headers = {
+            "Content-Type": "application/json",
+          };
+
+          if (sessionId) {
+            headers["X-Session-ID"] = sessionId;
+          }
+
+          console.log("📡 Request headers (JSON):", headers);
+
+          const response = await fetch(`${API_URL}/auth/signin`, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(encryptedCredentials),
+          });
+
+          console.log("📡 Response status (JSON):", response.status);
+          console.log(
+            "📡 Response headers (JSON):",
+            Object.fromEntries(response.headers.entries())
+          );
+
+          const result = await response.json();
+          console.log("📡 Response data (JSON):", result);
+
+          if (response.ok && result.data) {
+            authToken = result.data.access_token;
+
+            setStatus(
+              "Encrypted sign in with JSON content type successful!",
+              "success"
+            );
+            log(
+              {
+                operation: "Sign In (Encrypted with JSON)",
+                status: "success",
+                user: {
+                  id: result.data.user?.id,
+                  email: result.data.user?.email,
+                },
+                session: {
+                  access_token: result.data.access_token
+                    ? "Present"
+                    : "Missing",
+                  refresh_token: result.data.refresh_token
+                    ? "Present"
+                    : "Missing",
+                  expires_at: result.data.expires_at,
+                },
+                encryption:
+                  "Used session-based AES-256-GCM with JSON content type",
+              },
+              "success"
+            );
+          } else {
+            setStatus(
+              "Encrypted sign in with JSON content type failed",
+              "error"
+            );
+            log(
+              {
+                operation: "Sign In (Encrypted with JSON)",
+                status: "error",
+                error: result.error || "Unknown error",
+                response_status: response.status,
+                response_headers: Object.fromEntries(
+                  response.headers.entries()
+                ),
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          console.error("❌ Encrypted sign-in with JSON error:", error);
+          setStatus("Encrypted sign in with JSON content type failed", "error");
+          log(
+            {
+              operation: "Sign In (Encrypted with JSON)",
+              status: "error",
+              error: error.message,
+              error_type: error.name,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      // Get session
+      async function getSession() {
+        try {
+          setLoading(true);
+          setStatus("Getting session...", "info");
+
+          if (!authToken) {
+            throw new Error("No auth token available. Sign in first.");
+          }
+
+          const response = await fetch(`${API_URL}/auth/session`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${authToken}`,
+            },
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.data) {
+            setStatus("Session retrieved successfully!", "success");
+            log(
+              {
+                operation: "Get Session",
+                status: "success",
+                user: result.data,
+                security: result.data.security,
+              },
+              "success"
+            );
+          } else {
+            setStatus("Get session failed", "error");
+            log(
+              {
+                operation: "Get Session",
+                status: "error",
+                error: result.error || "Unknown error",
+              },
+              "error"
+            );
+          }
+        } catch (error) {
+          setStatus("Get session failed", "error");
+          log(
+            {
+              operation: "Get Session",
+              status: "error",
+              error: error.message,
+            },
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+    </script>
+  </body>
+</html>

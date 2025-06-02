@@ -54,6 +54,7 @@ class Config {
         "X-Request-ID",
         "X-Client-Version",
         "X-API-Key",
+        "X-Session-ID",
       ],
     };
   }
@@ -89,13 +90,32 @@ class Config {
       throw new Error(`Invalid URL in environment variables: ${error.message}`);
     }
 
-    // Validate key lengths
-    if (env.ENCRYPTION_KEY.length < 32) {
-      throw new Error("ENCRYPTION_KEY must be at least 32 characters");
+    // Validate key lengths and formats
+    if (env.ENCRYPTION_KEY.length !== 64) {
+      throw new Error(
+        "ENCRYPTION_KEY must be exactly 64 characters (32 bytes in hex)"
+      );
     }
+
+    // Validate that ENCRYPTION_KEY is valid hex
+    if (!/^[0-9a-fA-F]{64}$/.test(env.ENCRYPTION_KEY)) {
+      throw new Error(
+        "ENCRYPTION_KEY must be a valid 64-character hexadecimal string"
+      );
+    }
+
     if (env.JWT_SECRET.length < 32) {
       throw new Error("JWT_SECRET must be at least 32 characters");
     }
+  }
+
+  // Helper method to generate a valid encryption key
+  static generateEncryptionKey() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
+      ""
+    );
   }
 }
 
@@ -253,18 +273,35 @@ class PostgresClient {
   }
 
   buildInsertQuery(tableName, data, returning = "*") {
-    const columns = Object.keys(data);
-    const values = Object.values(data);
-    const placeholders = values.map((_, i) => `$${i + 1}`);
+    // Handle both single objects and arrays
+    const rows = Array.isArray(data) ? data : [data];
+
+    if (rows.length === 0) {
+      throw new Error("No data provided for insert");
+    }
+
+    // Get columns from the first row
+    const columns = Object.keys(rows[0]);
+    const allParams = [];
+    const valueGroups = [];
+    let paramIndex = 1;
+
+    // Build value groups for each row
+    for (const row of rows) {
+      const rowValues = columns.map((col) => row[col]);
+      const placeholders = rowValues.map(() => `$${paramIndex++}`);
+      valueGroups.push(`(${placeholders.join(", ")})`);
+      allParams.push(...rowValues);
+    }
 
     const sql = `
       INSERT INTO ${this.sanitizeIdentifier(tableName)} 
       (${columns.map((col) => this.sanitizeIdentifier(col)).join(", ")}) 
-      VALUES (${placeholders.join(", ")}) 
+      VALUES ${valueGroups.join(", ")} 
       RETURNING ${this.sanitizeSelectFields(returning)}
     `;
 
-    return { sql, params: values };
+    return { sql, params: allParams };
   }
 
   buildUpdateQuery(tableName, data, where, returning = "*") {
@@ -513,8 +550,18 @@ class Encryption {
       // Generate a random IV
       const iv = crypto.getRandomValues(new Uint8Array(12));
 
+      // Convert hex key to buffer (same as SDK)
+      if (!/^[0-9a-fA-F]{64}$/.test(this.key)) {
+        throw new Error(
+          "Invalid encryption key format - must be 64-character hex string"
+        );
+      }
+
+      const keyBuffer = new Uint8Array(
+        this.key.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+      );
+
       // Import the key
-      const keyBuffer = encoder.encode(this.key.padEnd(32, "0").slice(0, 32));
       const cryptoKey = await crypto.subtle.importKey(
         "raw",
         keyBuffer,
@@ -545,7 +592,10 @@ class Encryption {
         encrypted: true,
       };
     } catch (error) {
-      Logger.error("Encryption failed", { error: error.message });
+      Logger.error("Encryption failed", {
+        error: error.message,
+        stack: error.stack,
+      });
       throw new Error("Encryption failed");
     }
   }
@@ -560,7 +610,6 @@ class Encryption {
         return encryptedData;
       }
 
-      const encoder = new TextEncoder();
       const decoder = new TextDecoder();
 
       // Decode base64
@@ -572,8 +621,18 @@ class Encryption {
       const iv = combined.slice(0, 12);
       const encrypted = combined.slice(12);
 
+      // Convert hex key to buffer (same as SDK)
+      if (!/^[0-9a-fA-F]{64}$/.test(this.key)) {
+        throw new Error(
+          "Invalid encryption key format - must be 64-character hex string"
+        );
+      }
+
+      const keyBuffer = new Uint8Array(
+        this.key.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+      );
+
       // Import the key
-      const keyBuffer = encoder.encode(this.key.padEnd(32, "0").slice(0, 32));
       const cryptoKey = await crypto.subtle.importKey(
         "raw",
         keyBuffer,
@@ -593,7 +652,12 @@ class Encryption {
       const decryptedString = decoder.decode(decryptedBuffer);
       return JSON.parse(decryptedString);
     } catch (error) {
-      Logger.error("Decryption failed", { error: error.message });
+      Logger.error("Decryption failed", {
+        error: error.message,
+        stack: error.stack,
+        keyFormat: this.key ? "Present" : "Missing",
+        keyLength: this.key?.length || 0,
+      });
       throw new Error("Decryption failed");
     }
   }
@@ -1168,6 +1232,10 @@ const Handlers = {
         return await this.handleTokenRefresh(request, env, config);
       }
 
+      case "key-exchange": {
+        return await this.handleKeyExchange(request, env, config);
+      }
+
       default:
         return { error: { message: "Auth action not supported" } };
     }
@@ -1176,14 +1244,69 @@ const Handlers = {
   async handleSignup(request, env, config, encryption) {
     try {
       const contentType = request.headers.get("Content-Type") || "";
+      const sessionId = request.headers.get("X-Session-ID");
       let payload;
 
+      Logger.debug("Signup request received", {
+        contentType,
+        hasEncryption: !!encryption,
+        sessionId: sessionId || "None",
+      });
+
       if (contentType.includes("encrypted")) {
-        const encryptedText = await request.text();
-        const encryptedData = JSON.parse(encryptedText);
-        payload = await encryption.decrypt(encryptedData);
+        try {
+          // Get session-specific encryption key if available
+          let sessionEncryption = encryption;
+          if (sessionId && env.SAINT_CENTRAL_KV) {
+            const sessionData = await env.SAINT_CENTRAL_KV.get(
+              `session:${sessionId}`,
+              { type: "json" }
+            );
+            if (sessionData && sessionData.sessionKey) {
+              sessionEncryption = new Encryption(sessionData.sessionKey);
+              Logger.debug("Using session-specific encryption key");
+            }
+          }
+
+          const encryptedText = await request.text();
+          Logger.debug("Encrypted payload received", {
+            payloadLength: encryptedText.length,
+            payloadPreview: encryptedText.substring(0, 100) + "...",
+          });
+
+          const encryptedData = JSON.parse(encryptedText);
+          Logger.debug("Parsed encrypted data", {
+            version: encryptedData.version,
+            algorithm: encryptedData.algorithm,
+            encrypted: encryptedData.encrypted,
+            dataLength: encryptedData.data?.length,
+          });
+
+          payload = await sessionEncryption.decrypt(encryptedData);
+          Logger.debug("Decryption successful", {
+            hasEmail: !!payload.email,
+            hasPassword: !!payload.password,
+          });
+        } catch (decryptError) {
+          Logger.error("Decryption failed in signup", {
+            error: decryptError.message,
+            stack: decryptError.stack,
+            sessionId,
+          });
+          return {
+            error: {
+              message: "Failed to decrypt request payload",
+              code: "DECRYPTION_ERROR",
+              details:
+                process.env.NODE_ENV === "development"
+                  ? decryptError.message
+                  : undefined,
+            },
+          };
+        }
       } else {
         payload = await request.json();
+        Logger.debug("Unencrypted payload received");
       }
 
       // Validate input
@@ -1222,6 +1345,7 @@ const Handlers = {
           email: payload.email,
           success: response.ok,
           ip: request.headers.get("CF-Connecting-IP"),
+          sessionId,
         },
         env
       );
@@ -1232,22 +1356,80 @@ const Handlers = {
 
       return { data: result };
     } catch (error) {
-      Logger.error("Signup failed", { error: error.message });
-      return { error: { message: "Signup failed" } };
+      Logger.error("Signup failed", {
+        error: error.message,
+        stack: error.stack,
+      });
+      return { error: { message: "Signup failed", code: "SIGNUP_ERROR" } };
     }
   },
 
   async handleSignin(request, env, config, encryption) {
     try {
       const contentType = request.headers.get("Content-Type") || "";
+      const sessionId = request.headers.get("X-Session-ID");
       let payload;
 
+      Logger.debug("Signin request received", {
+        contentType,
+        hasEncryption: !!encryption,
+        sessionId: sessionId || "None",
+      });
+
       if (contentType.includes("encrypted")) {
-        const encryptedText = await request.text();
-        const encryptedData = JSON.parse(encryptedText);
-        payload = await encryption.decrypt(encryptedData);
+        try {
+          // Get session-specific encryption key if available
+          let sessionEncryption = encryption;
+          if (sessionId && env.SAINT_CENTRAL_KV) {
+            const sessionData = await env.SAINT_CENTRAL_KV.get(
+              `session:${sessionId}`,
+              { type: "json" }
+            );
+            if (sessionData && sessionData.sessionKey) {
+              sessionEncryption = new Encryption(sessionData.sessionKey);
+              Logger.debug("Using session-specific encryption key");
+            }
+          }
+
+          const encryptedText = await request.text();
+          Logger.debug("Encrypted payload received", {
+            payloadLength: encryptedText.length,
+            payloadPreview: encryptedText.substring(0, 100) + "...",
+          });
+
+          const encryptedData = JSON.parse(encryptedText);
+          Logger.debug("Parsed encrypted data", {
+            version: encryptedData.version,
+            algorithm: encryptedData.algorithm,
+            encrypted: encryptedData.encrypted,
+            dataLength: encryptedData.data?.length,
+          });
+
+          payload = await sessionEncryption.decrypt(encryptedData);
+          Logger.debug("Decryption successful", {
+            hasEmail: !!payload.email,
+            hasPassword: !!payload.password,
+          });
+        } catch (decryptError) {
+          Logger.error("Decryption failed in signin", {
+            error: decryptError.message,
+            stack: decryptError.stack,
+            sessionId,
+          });
+          return {
+            error: {
+              message: "Failed to decrypt request payload",
+              code: "DECRYPTION_ERROR",
+              details:
+                process.env.NODE_ENV === "development"
+                  ? decryptError.message
+                  : undefined,
+            },
+          };
+        }
       } else {
         payload = await request.json();
+        Logger.debug("Unencrypted payload received");
       }
 
       // Validate input
@@ -1272,6 +1454,7 @@ const Handlers = {
             email: payload.email,
             ip: request.headers.get("CF-Connecting-IP"),
             remainingTime: bruteForceCheck.remainingTime,
+            sessionId,
           },
           env
         );
@@ -1311,6 +1494,7 @@ const Handlers = {
             email: payload.email,
             ip: request.headers.get("CF-Connecting-IP"),
             error: result.error_description,
+            sessionId,
           },
           env
         );
@@ -1326,14 +1510,18 @@ const Handlers = {
           type: "LOGIN_SUCCESS",
           email: payload.email,
           ip: request.headers.get("CF-Connecting-IP"),
+          sessionId,
         },
         env
       );
 
       return { data: result };
     } catch (error) {
-      Logger.error("Signin failed", { error: error.message });
-      return { error: { message: "Signin failed" } };
+      Logger.error("Signin failed", {
+        error: error.message,
+        stack: error.stack,
+      });
+      return { error: { message: "Signin failed", code: "SIGNIN_ERROR" } };
     }
   },
 
@@ -1493,6 +1681,74 @@ const Handlers = {
     } catch (error) {
       Logger.error("Token refresh failed", { error: error.message });
       return { error: { message: "Token refresh failed" } };
+    }
+  },
+
+  async handleKeyExchange(request, env, config) {
+    try {
+      const clientIP = request.headers.get("CF-Connecting-IP");
+      const userAgent = request.headers.get("User-Agent");
+      const requestId = Security.generateRequestId();
+
+      // Generate a unique session-specific encryption key
+      const sessionKey = Config.generateEncryptionKey();
+
+      // Create a secure session identifier
+      const sessionId = crypto.randomUUID();
+
+      // Store the session key temporarily (expires in 1 hour)
+      const sessionData = {
+        sessionKey,
+        clientIP,
+        userAgent,
+        createdAt: Date.now(),
+        requestId,
+      };
+
+      if (env.SAINT_CENTRAL_KV) {
+        await env.SAINT_CENTRAL_KV.put(
+          `session:${sessionId}`,
+          JSON.stringify(sessionData),
+          { expirationTtl: 3600 } // 1 hour
+        );
+      }
+
+      // Log the key exchange for security monitoring
+      await Security.logSecurityEvent(
+        {
+          type: "KEY_EXCHANGE",
+          sessionId,
+          clientIP,
+          userAgent,
+          requestId,
+        },
+        env
+      );
+
+      Logger.info("Key exchange completed", {
+        sessionId,
+        clientIP,
+        requestId,
+      });
+
+      return {
+        data: {
+          sessionId,
+          sessionKey,
+          algorithm: "AES-256-GCM",
+          version: 2,
+          expiresAt: Date.now() + 3600000, // 1 hour
+          requestId,
+        },
+      };
+    } catch (error) {
+      Logger.error("Key exchange failed", {
+        error: error.message,
+        stack: error.stack,
+      });
+      return {
+        error: { message: "Key exchange failed", code: "KEY_EXCHANGE_ERROR" },
+      };
     }
   },
 
