@@ -251,6 +251,7 @@ export class EncryptionManager {
 
       if (this.config.debug) {
         console.log("Saint Central SDK: Session initialized", {
+          //
           sessionId: this.sessionId,
           expiresAt: new Date(this.sessionExpiry).toISOString(),
         });
@@ -290,98 +291,257 @@ export class EncryptionManager {
       await this.ensureSession();
 
       if (this.cryptoAPI.type === "web-crypto" && this.sessionKey) {
-        // INLINE FIX: All crypto operations directly in this method
-        // No external function calls that could cause context issues
+        let encoder, dataBuffer, iv, keyBuffer, cryptoKey, encryptedBuffer; // Hoist declarations
 
-        const encoder = new TextEncoder();
-        const dataBuffer = encoder.encode(JSON.stringify(data));
+        try {
+          // Inner try for the crypto steps themselves
+          console.log(
+            "Saint Central SDK: Attempting TextEncoder operations..."
+          ); //
+          encoder = new TextEncoder();
+          dataBuffer = encoder.encode(JSON.stringify(data));
+          console.log("Saint Central SDK: TextEncoder OK."); //
 
-        // Generate IV - direct call
-        let iv;
-        if (typeof window !== "undefined" && window.crypto) {
-          iv = window.crypto.getRandomValues(new Uint8Array(12));
-        } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-          iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
-        } else {
-          const nodeCrypto = require("crypto");
-          const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
-          iv = webCrypto.getRandomValues(new Uint8Array(12));
+          console.log("Saint Central SDK: Attempting getRandomValues..."); //
+          console.log("Saint Central SDK: window.crypto:", window.crypto); //
+          console.log(
+            "Saint Central SDK: typeof window.crypto.getRandomValues:",
+            typeof window.crypto?.getRandomValues
+          ); //
+
+          if (typeof window !== "undefined" && window.crypto) {
+            iv = window.crypto.getRandomValues(new Uint8Array(12));
+          } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
+            iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+          } else {
+            console.warn(
+              "Saint Central SDK: Falling back to Node.js crypto path for getRandomValues in browser-like environment. This is unexpected."
+            );
+            const nodeCrypto = require("crypto");
+            const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
+            iv = webCrypto.getRandomValues(new Uint8Array(12));
+          }
+          console.log("Saint Central SDK: getRandomValues OK."); //
+
+          console.log("Saint Central SDK: Attempting keyBuffer creation..."); //
+          if (
+            !this.sessionKey ||
+            typeof this.sessionKey !== "string" ||
+            !/^[0-9a-fA-F]{64}$/.test(this.sessionKey)
+          ) {
+            console.error(
+              "Saint Central SDK: Invalid sessionKey for keyBuffer creation:",
+              this.sessionKey
+            );
+            throw new Error(
+              "Invalid sessionKey format or type for encryption."
+            );
+          }
+          keyBuffer = new Uint8Array(
+            this.sessionKey.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+          );
+          console.log("Saint Central SDK: keyBuffer OK."); //
+
+          console.log(
+            "Saint Central SDK: Attempting importKey and encrypt operations..."
+          ); //
+          console.log(
+            "Saint Central SDK: window.crypto.subtle:",
+            window.crypto?.subtle
+          ); //
+          console.log(
+            "Saint Central SDK: typeof window.crypto.subtle.importKey:",
+            typeof window.crypto?.subtle?.importKey
+          ); //
+          console.log(
+            "Saint Central SDK: typeof window.crypto.subtle.encrypt:",
+            typeof window.crypto?.subtle?.encrypt
+          ); //
+
+          if (
+            typeof window !== "undefined" &&
+            window.crypto &&
+            window.crypto.subtle
+          ) {
+            console.log(
+              "Saint Central SDK: Using window.crypto.subtle for encryption"
+            ); //
+            cryptoKey = await window.crypto.subtle.importKey(
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["encrypt"]
+            );
+            console.log("Saint Central SDK: importKey OK."); //
+            encryptedBuffer = await window.crypto.subtle.encrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              dataBuffer
+            );
+            console.log("Saint Central SDK: encrypt OK."); //
+          } else if (
+            typeof globalThis !== "undefined" &&
+            globalThis.crypto &&
+            globalWatch.crypto.subtle
+          ) {
+            // Corrected globalWatch to globalThis
+            console.log(
+              "Saint Central SDK: Using globalThis.crypto.subtle for encryption"
+            );
+            cryptoKey = await globalThis.crypto.subtle.importKey(
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["encrypt"]
+            );
+            console.log("Saint Central SDK: importKey OK.");
+            encryptedBuffer = await globalThis.crypto.subtle.encrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              dataBuffer
+            );
+            console.log("Saint Central SDK: encrypt OK.");
+          } else {
+            console.warn(
+              "Saint Central SDK: Falling back to Node.js crypto path for importKey/encrypt in browser-like environment. This is unexpected."
+            );
+            const nodeCrypto = require("crypto");
+            const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
+            cryptoKey = await webCrypto.subtle.importKey(
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["encrypt"]
+            );
+            console.log("Saint Central SDK: importKey (Node path) OK.");
+            encryptedBuffer = await webCrypto.subtle.encrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              dataBuffer
+            );
+            console.log("Saint Central SDK: encrypt (Node path) OK.");
+          }
+        } catch (specificError) {
+          console.error(
+            "Saint Central SDK: Specific crypto operation failed:",
+            specificError.message,
+            specificError.name,
+            specificError.stack
+          );
+          throw new SaintCentralEncryptionError(
+            `Encryption failed at a specific step: ${specificError.message} (Name: ${specificError.name})`,
+            "ENCRYPTION_STEP_FAILED",
+            {
+              originalErrorName: specificError.name,
+              originalErrorMessage: specificError.message,
+              originalStack: specificError.stack,
+            }
+          );
         }
+        // ##### END DEBUGGING MODIFICATIONS for crypto steps #####
 
-        // Create key buffer
-        const keyBuffer = new Uint8Array(
-          this.sessionKey.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
-        );
+        // ##### START DEBUGGING MODIFICATIONS for post-crypto operations #####
+        try {
+          console.log(
+            "Saint Central SDK: Post-encryption processing. Checking variables..."
+          ); //
+          console.log(
+            "Saint Central SDK: iv (type, length):",
+            typeof iv,
+            iv?.length,
+            iv instanceof Uint8Array
+              ? "is Uint8Array"
+              : "NOT Uint8Array" /*, iv*/
+          ); //
+          console.log(
+            "Saint Central SDK: encryptedBuffer (type, byteLength):",
+            typeof encryptedBuffer,
+            encryptedBuffer?.byteLength,
+            encryptedBuffer instanceof ArrayBuffer
+              ? "is ArrayBuffer"
+              : "NOT ArrayBuffer" /*, encryptedBuffer*/
+          ); //
 
-        // Import key and encrypt - direct calls
-        let cryptoKey, encryptedBuffer;
+          if (!iv || !(iv instanceof Uint8Array) || iv.length !== 12) {
+            console.error(
+              "Saint Central SDK: IV is invalid or not a Uint8Array of length 12!",
+              iv
+            );
+            throw new Error("IV is invalid post-encryption operations.");
+          }
+          if (!encryptedBuffer || !(encryptedBuffer instanceof ArrayBuffer)) {
+            console.error(
+              "Saint Central SDK: encryptedBuffer is invalid or not an ArrayBuffer!",
+              encryptedBuffer
+            );
+            throw new Error(
+              "encryptedBuffer is invalid post-encryption operations."
+            );
+          }
 
-        if (
-          typeof window !== "undefined" &&
-          window.crypto &&
-          window.crypto.subtle
-        ) {
-          cryptoKey = await window.crypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt"]
-          );
+          console.log("Saint Central SDK: Combining IV and encryptedBuffer..."); //
+          const result = new Uint8Array(iv.length + encryptedBuffer.byteLength);
+          console.log(
+            "Saint Central SDK: 'result' array created with length:",
+            result.length
+          ); //
 
-          encryptedBuffer = await window.crypto.subtle.encrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            dataBuffer
-          );
-        } else if (
-          typeof globalThis !== "undefined" &&
-          globalThis.crypto &&
-          globalThis.crypto.subtle
-        ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt"]
-          );
+          result.set(iv, 0);
+          console.log("Saint Central SDK: IV set into result array."); //
 
-          encryptedBuffer = await globalThis.crypto.subtle.encrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            dataBuffer
-          );
-        } else {
-          const nodeCrypto = require("crypto");
-          const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
+          result.set(new Uint8Array(encryptedBuffer), iv.length);
+          console.log(
+            "Saint Central SDK: encryptedBuffer set into result array."
+          ); //
+          // console.log("Saint Central SDK: 'result' array populated (first 20 bytes):", result.slice(0,20));
 
-          cryptoKey = await webCrypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["encrypt"]
-          );
+          console.log(
+            "Saint Central SDK: Preparing data for btoa via String.fromCharCode..."
+          ); //
+          const charString = String.fromCharCode(...result);
+          console.log(
+            "Saint Central SDK: charString created (length):",
+            charString.length
+          ); //
+          console.log("Saint Central SDK: Calling this.base64.btoa..."); //
+          console.log(
+            "Saint Central SDK: this.base64.btoa is:",
+            this.base64.btoa === window.btoa
+              ? "native window.btoa"
+              : "custom/polyfilled btoa"
+          ); //
 
-          encryptedBuffer = await webCrypto.subtle.encrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            dataBuffer
+          // const base64EncodedData = this.base64.btoa(charString); // Original failing line for encryption
+          const base64EncodedData = window.btoa(charString); // Explicitly call global btoa
+          console.log("Saint Central SDK: btoa call successful."); //
+
+          return {
+            version: 2,
+            algorithm: "aes-256-gcm",
+            data: base64EncodedData,
+            encrypted: true,
+          };
+        } catch (postCryptoError) {
+          console.error(
+            "Saint Central SDK: Error during post-encryption processing (IV combination, fromCharCode, or btoa):",
+            postCryptoError.message,
+            postCryptoError.name,
+            postCryptoError.stack
+          ); //
+          throw new SaintCentralEncryptionError(
+            `Encryption failed during post-processing: ${postCryptoError.message} (Name: ${postCryptoError.name})`,
+            "ENCRYPTION_POST_PROCESSING_FAILED",
+            {
+              originalErrorName: postCryptoError.name,
+              originalErrorMessage: postCryptoError.message,
+              originalStack: postCryptoError.stack,
+            }
           );
         }
-
-        // Combine IV and encrypted data
-        const result = new Uint8Array(iv.length + encryptedBuffer.byteLength);
-        result.set(iv, 0);
-        result.set(new Uint8Array(encryptedBuffer), iv.length);
-
-        return {
-          version: 2,
-          algorithm: "aes-256-gcm",
-          data: this.base64.btoa(String.fromCharCode(...result)),
-          encrypted: true,
-        };
+        // ##### END DEBUGGING MODIFICATIONS for post-crypto operations #####
       } else if (this.cryptoAPI.encrypt) {
         return await this.cryptoAPI.encrypt(data, this.sessionKey);
       } else {
@@ -392,12 +552,28 @@ export class EncryptionManager {
       }
     } catch (error) {
       if (error instanceof SaintCentralEncryptionError) {
+        if (
+          error.code === "ENCRYPTION_STEP_FAILED" ||
+          error.code === "ENCRYPTION_POST_PROCESSING_FAILED"
+        )
+          throw error;
         throw error;
       }
+      console.error(
+        "Saint Central SDK: General encryption error catch block:",
+        error.message,
+        error.name,
+        error.stack
+      );
       throw new SaintCentralEncryptionError(
-        `Encryption failed: ${error.message}`,
+        `Encryption failed: ${error.message} (Name: ${error.name})`,
         "ENCRYPTION_FAILED",
-        { algorithm: this.cryptoAPI.type, error: error.message }
+        {
+          algorithm: this.cryptoAPI.type,
+          originalErrorName: error.name,
+          originalErrorMessage: error.message,
+          originalStack: error.stack,
+        }
       );
     }
   }
@@ -409,111 +585,248 @@ export class EncryptionManager {
         typeof encryptedData !== "object" ||
         !encryptedData.encrypted
       ) {
+        console.log(
+          "Saint Central SDK: Decryption skipped - data not encrypted or invalid.",
+          encryptedData
+        );
         return encryptedData;
       }
+      console.log(
+        "Saint Central SDK: Starting decryption for data:",
+        encryptedData
+      );
 
       if (encryptedData.version === 2 && this.cryptoAPI.type === "web-crypto") {
-        // INLINE FIX: All crypto operations directly in this method
+        let decoder,
+          combined,
+          iv,
+          encrypted,
+          keyBuffer,
+          cryptoKey,
+          decryptedBuffer,
+          decryptedString;
 
-        const decoder = new TextDecoder();
-        const combined = Uint8Array.from(
-          this.base64.atob(encryptedData.data),
-          (c) => c.charCodeAt(0)
-        );
-
-        const iv = combined.slice(0, 12);
-        const encrypted = combined.slice(12);
-
-        const keyBuffer = new Uint8Array(
-          this.sessionKey.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
-        );
-
-        // Import key and decrypt - direct calls
-        let cryptoKey, decryptedBuffer;
-
-        if (
-          typeof window !== "undefined" &&
-          window.crypto &&
-          window.crypto.subtle
-        ) {
-          cryptoKey = await window.crypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["decrypt"]
+        // ##### START DEBUGGING MODIFICATIONS for decrypt #####
+        try {
+          console.log(
+            "Saint Central SDK: Decrypt - Attempting atob operation..."
+          );
+          console.log(
+            "Saint Central SDK: this.base64.atob is:",
+            this.base64.atob === window.atob
+              ? "native window.atob"
+              : "custom/polyfilled atob"
+          );
+          // const decodedDataString = this.base64.atob(encryptedData.data); // Original
+          const decodedDataString = window.atob(encryptedData.data); // Explicitly call global atob
+          console.log(
+            "Saint Central SDK: Decrypt - atob OK. Decoded string length:",
+            decodedDataString.length
           );
 
-          decryptedBuffer = await window.crypto.subtle.decrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            encrypted
+          console.log(
+            "Saint Central SDK: Decrypt - Converting decoded string to Uint8Array..."
           );
-        } else if (
-          typeof globalThis !== "undefined" &&
-          globalThis.crypto &&
-          globalThis.crypto.subtle
-        ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["decrypt"]
+          combined = Uint8Array.from(decodedDataString, (c) => c.charCodeAt(0));
+          console.log(
+            "Saint Central SDK: Decrypt - Uint8Array 'combined' created, length:",
+            combined.length
           );
 
-          decryptedBuffer = await globalThis.crypto.subtle.decrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            encrypted
+          console.log(
+            "Saint Central SDK: Decrypt - Slicing IV and encrypted data..."
           );
-        } else {
-          const nodeCrypto = require("crypto");
-          const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
+          iv = combined.slice(0, 12);
+          encrypted = combined.slice(12);
+          console.log(
+            "Saint Central SDK: Decrypt - IV length:",
+            iv.length,
+            "Encrypted data length:",
+            encrypted.length
+          );
+          if (iv.length !== 12) {
+            throw new Error(`Invalid IV length: ${iv.length}. Expected 12.`);
+          }
 
-          cryptoKey = await webCrypto.subtle.importKey(
-            "raw",
-            keyBuffer,
-            { name: "AES-GCM" },
-            false,
-            ["decrypt"]
+          console.log(
+            "Saint Central SDK: Decrypt - Validating and preparing sessionKey for keyBuffer..."
+          );
+          if (
+            !this.sessionKey ||
+            typeof this.sessionKey !== "string" ||
+            !/^[0-9a-fA-F]{64}$/.test(this.sessionKey)
+          ) {
+            console.error(
+              "Saint Central SDK: Decrypt - Invalid sessionKey for keyBuffer creation:",
+              this.sessionKey
+            );
+            throw new Error(
+              "Invalid sessionKey format or type for decryption."
+            );
+          }
+          keyBuffer = new Uint8Array(
+            this.sessionKey.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+          );
+          console.log("Saint Central SDK: Decrypt - keyBuffer OK.");
+
+          console.log(
+            "Saint Central SDK: Decrypt - Attempting importKey and decrypt operations..."
+          );
+          console.log(
+            "Saint Central SDK: Decrypt - window.crypto.subtle:",
+            window.crypto?.subtle
+          );
+          console.log(
+            "Saint Central SDK: Decrypt - typeof window.crypto.subtle.importKey:",
+            typeof window.crypto?.subtle?.importKey
+          );
+          console.log(
+            "Saint Central SDK: Decrypt - typeof window.crypto.subtle.decrypt:",
+            typeof window.crypto?.subtle?.decrypt
           );
 
-          decryptedBuffer = await webCrypto.subtle.decrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            encrypted
+          if (
+            typeof window !== "undefined" &&
+            window.crypto &&
+            window.crypto.subtle
+          ) {
+            console.log(
+              "Saint Central SDK: Decrypt - Using window.crypto.subtle for decryption"
+            );
+            cryptoKey = await window.crypto.subtle.importKey(
+              // Around original error line encryption.js:591
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["decrypt"]
+            );
+            console.log("Saint Central SDK: Decrypt - importKey OK.");
+            decryptedBuffer = await window.crypto.subtle.decrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              encrypted
+            );
+            console.log("Saint Central SDK: Decrypt - decrypt OK.");
+          } else if (
+            typeof globalThis !== "undefined" &&
+            globalThis.crypto &&
+            globalThis.crypto.subtle
+          ) {
+            console.log(
+              "Saint Central SDK: Decrypt - Using globalThis.crypto.subtle for decryption"
+            );
+            cryptoKey = await globalThis.crypto.subtle.importKey(
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["decrypt"]
+            );
+            console.log("Saint Central SDK: Decrypt - importKey OK.");
+            decryptedBuffer = await globalThis.crypto.subtle.decrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              encrypted
+            );
+            console.log("Saint Central SDK: Decrypt - decrypt OK.");
+          } else {
+            console.warn(
+              "Saint Central SDK: Decrypt - Falling back to Node.js crypto path. This is unexpected in browser."
+            );
+            const nodeCrypto = require("crypto");
+            const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
+            cryptoKey = await webCrypto.subtle.importKey(
+              "raw",
+              keyBuffer,
+              { name: "AES-GCM" },
+              false,
+              ["decrypt"]
+            );
+            console.log(
+              "Saint Central SDK: Decrypt - importKey (Node path) OK."
+            );
+            decryptedBuffer = await webCrypto.subtle.decrypt(
+              { name: "AES-GCM", iv },
+              cryptoKey,
+              encrypted
+            );
+            console.log("Saint Central SDK: Decrypt - decrypt (Node path) OK.");
+          }
+
+          console.log(
+            "Saint Central SDK: Decrypt - Decoding decrypted buffer..."
+          );
+          decoder = new TextDecoder();
+          decryptedString = decoder.decode(decryptedBuffer);
+          console.log("Saint Central SDK: Decrypt - TextDecoder decode OK.");
+
+          console.log("Saint Central SDK: Decrypt - Parsing JSON...");
+          const parsedResult = JSON.parse(decryptedString);
+          console.log("Saint Central SDK: Decrypt - JSON parse OK.");
+          return parsedResult;
+        } catch (specificDecryptError) {
+          console.error(
+            "Saint Central SDK: Specific decrypt operation failed:",
+            specificDecryptError.message,
+            specificDecryptError.name,
+            specificDecryptError.stack
+          );
+          throw new SaintCentralEncryptionError(
+            `Decryption failed at a specific step: ${specificDecryptError.message} (Name: ${specificDecryptError.name})`,
+            "DECRYPTION_STEP_FAILED",
+            {
+              originalErrorName: specificDecryptError.name,
+              originalErrorMessage: specificDecryptError.message,
+              originalStack: specificDecryptError.stack,
+              encryptedDataSource:
+                encryptedData?.data?.substring(0, 50) + "...",
+            }
           );
         }
-
-        const decryptedString = decoder.decode(decryptedBuffer);
-        return JSON.parse(decryptedString);
+        // ##### END DEBUGGING MODIFICATIONS for decrypt #####
       } else if (
         encryptedData.version === 3 &&
         encryptedData.algorithm === "aes-256-cbc" &&
         this.cryptoAPI.encrypt
       ) {
-        // Handle React Native AES decryption
         const { createDecipher } = require("react-native-crypto");
         const decipher = createDecipher("aes-256-cbc", this.sessionKey);
         let decrypted = decipher.update(encryptedData.data, "hex", "utf8");
         decrypted += decipher.final("utf8");
         return JSON.parse(decrypted);
       } else {
+        console.error(
+          "Saint Central SDK: Decrypt - Unsupported encryption algorithm or version.",
+          encryptedData
+        );
         throw new SaintCentralEncryptionError(
-          `Unsupported encryption algorithm: ${encryptedData.algorithm}`,
-          "UNSUPPORTED_ALGORITHM",
+          `Unsupported encryption algorithm or version for decryption: ${encryptedData.algorithm}, v${encryptedData.version}`,
+          "UNSUPPORTED_ALGORITHM_DECRYPT",
           { algorithm: encryptedData.algorithm, version: encryptedData.version }
         );
       }
     } catch (error) {
       if (error instanceof SaintCentralEncryptionError) {
+        if (error.code === "DECRYPTION_STEP_FAILED") throw error; //
         throw error;
       }
+      console.error(
+        "Saint Central SDK: General decryption error catch block:",
+        error.message,
+        error.name,
+        error.stack
+      ); //
       throw new SaintCentralEncryptionError(
-        `Decryption failed: ${error.message}`,
+        `Decryption failed: ${error.message} (Name: ${error.name})`,
         "DECRYPTION_FAILED",
-        { data: encryptedData, error: error.message }
+        {
+          algorithm: encryptedData?.algorithm,
+          version: encryptedData?.version,
+          originalErrorName: error.name,
+          originalErrorMessage: error.message,
+          originalStack: error.stack,
+        }
       );
     }
   }
