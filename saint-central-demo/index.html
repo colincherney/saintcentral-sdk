@@ -1,709 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Saint Central SDK Test Suite</title>
-    <style>
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 20px;
-        background: #f5f7fa;
-      }
-      .header {
-        text-align: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-      }
-      .container {
-        background: white;
-        border-radius: 12px;
-        padding: 25px;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-      }
-      .grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 30px;
-      }
-      .section {
-        margin-bottom: 30px;
-      }
-      .section h3 {
-        color: #2d3748;
-        border-left: 4px solid #4299e1;
-        padding-left: 15px;
-        margin-bottom: 20px;
-      }
-      .form-group {
-        margin-bottom: 15px;
-      }
-      label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 600;
-        color: #4a5568;
-      }
-      input,
-      textarea,
-      select {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #e2e8f0;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: border-color 0.2s;
-      }
-      input:focus,
-      textarea:focus,
-      select:focus {
-        outline: none;
-        border-color: #4299e1;
-      }
-      textarea {
-        height: 80px;
-        resize: vertical;
-      }
-      button {
-        background: #4299e1;
-        color: white;
-        border: none;
-        padding: 12px 20px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 600;
-        margin-right: 10px;
-        margin-bottom: 10px;
-        transition: all 0.2s;
-      }
-      button:hover {
-        background: #3182ce;
-        transform: translateY(-1px);
-      }
-      button:disabled {
-        background: #a0aec0;
-        cursor: not-allowed;
-        transform: none;
-      }
-      .btn-success {
-        background: #48bb78;
-      }
-      .btn-success:hover {
-        background: #38a169;
-      }
-      .btn-danger {
-        background: #f56565;
-      }
-      .btn-danger:hover {
-        background: #e53e3e;
-      }
-      .btn-warning {
-        background: #ed8936;
-      }
-      .btn-warning:hover {
-        background: #dd6b20;
-      }
-      .status {
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 20px;
-        font-weight: 600;
-      }
-      .status.connected {
-        background: #c6f6d5;
-        color: #22543d;
-        border: 1px solid #9ae6b4;
-      }
-      .status.disconnected {
-        background: #fed7d7;
-        color: #742a2a;
-        border: 1px solid #fc8181;
-      }
-      .output {
-        background: #1a202c;
-        color: #e2e8f0;
-        padding: 20px;
-        border-radius: 8px;
-        font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
-        font-size: 13px;
-        line-height: 1.5;
-        max-height: 500px;
-        overflow-y: auto;
-        white-space: pre-wrap;
-      }
-      .encryption-badge {
-        display: inline-block;
-        background: #fed7007a;
-        color: #744210;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 600;
-        margin-left: 8px;
-      }
-      .encryption-badge.encrypted {
-        background: #c6f6d5;
-        color: #22543d;
-      }
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 15px;
-        margin-top: 20px;
-      }
-      .stat-card {
-        background: #f7fafc;
-        padding: 15px;
-        border-radius: 8px;
-        text-align: center;
-      }
-      .stat-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: #2d3748;
-      }
-      .stat-label {
-        font-size: 12px;
-        color: #718096;
-        margin-top: 4px;
-      }
-      .quick-actions {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 20px;
-      }
-      @media (max-width: 768px) {
-        .grid {
-          grid-template-columns: 1fr;
-        }
-        .quick-actions {
-          flex-direction: column;
-        }
-      }
-    </style>
+    <title>Test Inline Fix</title>
   </head>
   <body>
-    <div class="header">
-      <h1>🛡️ Saint Central SDK Test Suite</h1>
-      <p>Complete testing environment for auth & CRUD operations</p>
-    </div>
-
-    <div class="container">
-      <div class="section">
-        <h3>⚙️ Configuration</h3>
-        <div class="form-group">
-          <label for="apiUrl">API URL:</label>
-          <input
-            type="url"
-            id="apiUrl"
-            value="https://saint-central-api.colinmcherney.workers.dev"
-            placeholder="https://your-worker.workers.dev"
-          />
-        </div>
-        <div class="quick-actions">
-          <button onclick="initializeSDK()">Initialize SDK</button>
-          <button onclick="testConnectivity()" class="btn-warning">
-            Test Connectivity
-          </button>
-          <button onclick="clearLogs()" class="btn-danger">Clear Logs</button>
-        </div>
-        <div id="status" class="status disconnected">Not initialized</div>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div class="container">
-        <div class="section">
-          <h3>
-            🔐 Authentication Tests
-            <span class="encryption-badge encrypted">ENCRYPTED</span>
-          </h3>
-
-          <div class="form-group">
-            <label for="email">Email:</label>
-            <input type="email" id="email" value="test@example.com" />
-          </div>
-          <div class="form-group">
-            <label for="password">Password:</label>
-            <input type="password" id="password" value="SecurePassword123!" />
-          </div>
-
-          <div class="quick-actions">
-            <button onclick="testSignUp()">Sign Up</button>
-            <button onclick="testSignIn()" class="btn-success">Sign In</button>
-            <button onclick="testSignOut()" class="btn-danger">Sign Out</button>
-          </div>
-
-          <div class="quick-actions">
-            <button onclick="testGetSession()">Get Session</button>
-            <button onclick="testGetUser()">Get User</button>
-            <button onclick="testIsAuthenticated()">Check Auth</button>
-          </div>
-
-          <div class="form-group">
-            <label for="resetEmail">Password Reset Email:</label>
-            <input type="email" id="resetEmail" value="test@example.com" />
-            <button onclick="testPasswordReset()" style="margin-top: 10px">
-              Reset Password
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="container">
-        <div class="section">
-          <h3>
-            📊 Database Tests <span class="encryption-badge">UNENCRYPTED</span>
-          </h3>
-
-          <div class="form-group">
-            <label for="tableName">Table Name:</label>
-            <input type="text" id="tableName" value="test" />
-          </div>
-
-          <div class="form-group">
-            <label for="selectColumns">Select Columns:</label>
-            <input
-              type="text"
-              id="selectColumns"
-              value="*"
-              placeholder="*, name, email"
-            />
-          </div>
-
-          <div class="quick-actions">
-            <button onclick="testSelectAll()">Select All</button>
-            <button onclick="testFindOne()">Find One</button>
-            <button onclick="testCount()">Count Records</button>
-          </div>
-
-          <div class="form-group">
-            <label for="insertData">Insert Data (JSON):</label>
-            <textarea id="insertData">
-{"name": "John Doe", "email": "john@example.com", "age": 30}</textarea
-            >
-          </div>
-          <button onclick="testInsert()" class="btn-success">
-            Insert Record
-          </button>
-
-          <div class="form-group">
-            <label for="updateFilters">Update Filters (JSON):</label>
-            <textarea id="updateFilters">{"id": 1}</textarea>
-          </div>
-          <div class="form-group">
-            <label for="updateData">Update Data (JSON):</label>
-            <textarea id="updateData">{"name": "Jane Doe Updated"}</textarea>
-          </div>
-          <button onclick="testUpdate()" class="btn-warning">
-            Update Record
-          </button>
-
-          <div class="form-group">
-            <label for="deleteFilters">Delete Filters (JSON):</label>
-            <textarea id="deleteFilters">{"id": 1}</textarea>
-          </div>
-          <button onclick="testDelete()" class="btn-danger">
-            Delete Record
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="container">
-      <div class="section">
-        <h3>🔍 Advanced Query Tests</h3>
-        <div class="quick-actions">
-          <button onclick="testQueryBuilder()">Query Builder</button>
-          <button onclick="testChainedQuery()">Chained Query</button>
-          <button onclick="testPagination()">Pagination</button>
-          <button onclick="testSorting()">Sorting</button>
-          <button onclick="testFiltering()">Filtering</button>
-        </div>
-
-        <div class="form-group">
-          <label for="rpcFunction">RPC Function Name:</label>
-          <input type="text" id="rpcFunction" value="hello_world" />
-        </div>
-        <div class="form-group">
-          <label for="rpcParams">RPC Parameters (JSON):</label>
-          <textarea id="rpcParams">{"name": "World"}</textarea>
-        </div>
-        <button onclick="testRPC()">Call RPC Function</button>
-      </div>
-    </div>
-
-    <div class="container">
-      <div class="section">
-        <h3>📊 Test Statistics</h3>
-        <div class="stats" id="stats">
-          <div class="stat-card">
-            <div class="stat-value" id="totalTests">0</div>
-            <div class="stat-label">Total Tests</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="successfulTests">0</div>
-            <div class="stat-label">Successful</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="failedTests">0</div>
-            <div class="stat-label">Failed</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value" id="avgResponseTime">0ms</div>
-            <div class="stat-label">Avg Response</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="container">
-      <div class="section">
-        <h3>📋 Test Output</h3>
-        <div id="output" class="output">Test results will appear here...</div>
-      </div>
-    </div>
+    <h1>🎯 Test Inline Fix - No External Function Calls</h1>
+    <button onclick="testInlineFix()">Test Inline Fix</button>
+    <pre id="output"></pre>
 
     <script type="module">
-      import { createClient } from "./src/sdk.js";
-
-      let client = null;
-      let stats = {
-        total: 0,
-        successful: 0,
-        failed: 0,
-        responseTimes: [],
-      };
-
-      function updateStats() {
-        document.getElementById("totalTests").textContent = stats.total;
-        document.getElementById("successfulTests").textContent =
-          stats.successful;
-        document.getElementById("failedTests").textContent = stats.failed;
-
-        const avgTime =
-          stats.responseTimes.length > 0
-            ? Math.round(
-                stats.responseTimes.reduce((a, b) => a + b, 0) /
-                  stats.responseTimes.length
-              )
-            : 0;
-        document.getElementById("avgResponseTime").textContent = avgTime + "ms";
-      }
-
-      function log(message, isError = false) {
+      window.testInlineFix = async function () {
         const output = document.getElementById("output");
-        const timestamp = new Date().toLocaleTimeString();
-        const prefix = isError ? "❌" : "✅";
-        output.textContent = `[${timestamp}] ${prefix} ${message}\n\n${output.textContent}`;
+        output.textContent = "";
 
-        stats.total++;
-        if (isError) {
-          stats.failed++;
-        } else {
-          stats.successful++;
+        function log(msg) {
+          output.textContent += msg + "\n";
+          console.log(msg);
         }
-        updateStats();
-      }
-
-      async function runTest(testName, testFn) {
-        const startTime = Date.now();
-        try {
-          await testFn();
-          const duration = Date.now() - startTime;
-          stats.responseTimes.push(duration);
-          log(`${testName}: Success (${duration}ms)`);
-        } catch (error) {
-          const duration = Date.now() - startTime;
-          stats.responseTimes.push(duration);
-          log(`${testName}: ${error.message} (${duration}ms)`, true);
-        }
-      }
-
-      window.initializeSDK = async function () {
-        const url = document.getElementById("apiUrl").value;
-        if (!url) return alert("Enter API URL");
 
         try {
-          client = createClient(url);
-          document.getElementById("status").className = "status connected";
-          document.getElementById("status").textContent =
-            "✅ SDK Initialized - Ready for testing";
-          log("SDK initialized successfully");
+          log("=== TESTING INLINE FIX ===");
+
+          const { createClient } = await import("../sdk/index.js");
+
+          const client = createClient(
+            "https://saint-central-api.colinmcherney.workers.dev",
+            {
+              debug: true,
+              enableEncryption: true,
+            }
+          );
+
+          log("✅ Client created");
+
+          const testData = { test: "hello world", timestamp: Date.now() };
+          log(`Testing: ${JSON.stringify(testData)}`);
+
+          // Test encryption (now fully inline)
+          const encrypted = await client
+            ._getManagers()
+            .encryption.encrypt(testData);
+          log(`✅ Encryption works! ${JSON.stringify(encrypted)}`);
+
+          // Test decryption (now fully inline)
+          const decrypted = await client
+            ._getManagers()
+            .encryption.decrypt(encrypted);
+          log(`✅ Decryption works! ${JSON.stringify(decrypted)}`);
+
+          // Test full auth flow
+          const email = `test-${Date.now()}@example.com`;
+          log(`\nTesting auth with: ${email}`);
+
+          const authResult = await client.auth.signUp({
+            email: email,
+            password: "SecurePassword123!@#",
+          });
+
+          if (authResult.error) {
+            log(`Auth: ${authResult.error.message}`);
+          } else {
+            log(
+              `✅ Auth successful! User: ${
+                authResult.data?.user?.email || "Unknown"
+              }`
+            );
+          }
+
+          // Test database
+          const dbResult = await client.from("users").select("*").limit(5);
+          if (dbResult.error) {
+            log(`DB: ${dbResult.error.message}`);
+          } else {
+            log(`✅ Database works! Got ${dbResult.data?.length || 0} results`);
+          }
+
+          log("\n🎉 SUCCESS! Inline crypto operations work! 🎉");
         } catch (error) {
-          log(`SDK initialization failed: ${error.message}`, true);
+          log(`❌ ERROR: ${error.message}`);
+          log(`Stack: ${error.stack}`);
         }
       };
-
-      window.testConnectivity = async function () {
-        const url = document.getElementById("apiUrl").value;
-        await runTest("Connectivity", async () => {
-          const response = await fetch(url);
-          const data = await response.json();
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          log(`Connectivity: ${data.name} v${data.version} (${data.status})`);
-        });
-      };
-
-      window.clearLogs = function () {
-        document.getElementById("output").textContent = "Logs cleared...";
-        stats = { total: 0, successful: 0, failed: 0, responseTimes: [] };
-        updateStats();
-      };
-
-      // Auth Tests
-      window.testSignUp = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
-
-        await runTest("Sign Up", async () => {
-          const result = await client.auth.signUp(email, password);
-          if (result.error) throw new Error(result.error.message);
-          log(`Sign Up: User created for ${email}`);
-        });
-      };
-
-      window.testSignIn = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const email = document.getElementById("email").value;
-        const password = document.getElementById("password").value;
-
-        await runTest("Sign In", async () => {
-          const result = await client.auth.signIn(email, password);
-          if (result.error) throw new Error(result.error.message);
-          log(`Sign In: Authenticated as ${email}`);
-        });
-      };
-
-      window.testSignOut = async function () {
-        if (!client) return alert("Initialize SDK first");
-
-        await runTest("Sign Out", async () => {
-          const result = await client.auth.signOut();
-          if (result.error) throw new Error(result.error.message);
-          log("Sign Out: Session ended");
-        });
-      };
-
-      window.testGetSession = async function () {
-        if (!client) return alert("Initialize SDK first");
-
-        await runTest("Get Session", async () => {
-          const result = await client.auth.getSession();
-          const session = result.data.session;
-          if (session && session.access_token) {
-            log(`Get Session: Active session found`);
-          } else {
-            log("Get Session: No active session");
-          }
-        });
-      };
-
-      window.testGetUser = async function () {
-        if (!client) return alert("Initialize SDK first");
-
-        await runTest("Get User", async () => {
-          const user = await client.getUser();
-          if (user) {
-            log(`Get User: ${user.email || "User found"}`);
-          } else {
-            log("Get User: No user found");
-          }
-        });
-      };
-
-      window.testIsAuthenticated = async function () {
-        if (!client) return alert("Initialize SDK first");
-
-        await runTest("Check Auth", async () => {
-          const isAuth = await client.isAuthenticated();
-          log(
-            `Authentication Status: ${
-              isAuth ? "Authenticated" : "Not authenticated"
-            }`
-          );
-        });
-      };
-
-      window.testPasswordReset = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const email = document.getElementById("resetEmail").value;
-
-        await runTest("Password Reset", async () => {
-          const result = await client.auth.resetPassword(email);
-          if (result.error) throw new Error(result.error.message);
-          log(`Password Reset: Email sent to ${email}`);
-        });
-      };
-
-      // CRUD Tests
-      window.testSelectAll = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-        const columns = document.getElementById("selectColumns").value;
-
-        await runTest("Select All", async () => {
-          const result = await client.from(table).select(columns);
-          log(`Select All: Found ${result.length} records in ${table}`);
-        });
-      };
-
-      window.testFindOne = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Find One", async () => {
-          const result = await client.from(table).findOne();
-          if (result) {
-            log(`Find One: Record found in ${table}`);
-          } else {
-            log(`Find One: No records in ${table}`);
-          }
-        });
-      };
-
-      window.testCount = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Count Records", async () => {
-          const result = await client.from(table).select();
-          log(`Count: ${result.length} records in ${table}`);
-        });
-      };
-
-      window.testInsert = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-        const data = JSON.parse(document.getElementById("insertData").value);
-
-        await runTest("Insert", async () => {
-          const result = await client.from(table).insert(data);
-          log(`Insert: Record added to ${table}`);
-        });
-      };
-
-      window.testUpdate = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-        const filters = JSON.parse(
-          document.getElementById("updateFilters").value
-        );
-        const data = JSON.parse(document.getElementById("updateData").value);
-
-        await runTest("Update", async () => {
-          const result = await client.from(table).update(filters, data);
-          log(`Update: Record updated in ${table}`);
-        });
-      };
-
-      window.testDelete = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-        const filters = JSON.parse(
-          document.getElementById("deleteFilters").value
-        );
-
-        await runTest("Delete", async () => {
-          const result = await client.from(table).delete(filters);
-          log(`Delete: Record removed from ${table}`);
-        });
-      };
-
-      // Advanced Query Tests
-      window.testQueryBuilder = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Query Builder", async () => {
-          const result = await client
-            .from(table)
-            .find({ name: "John" }, { order: "id.asc", limit: 5 });
-          log(`Query Builder: Found ${result.length} records with name='John'`);
-        });
-      };
-
-      window.testChainedQuery = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Chained Query", async () => {
-          const result = await client
-            .from(table)
-            .gt("age", 18)
-            .lt("age", 65)
-            .order("name", "asc")
-            .limit(10)
-            .get();
-          log(`Chained Query: Found ${result.length} adults`);
-        });
-      };
-
-      window.testPagination = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Pagination", async () => {
-          const page1 = await client
-            .from(table)
-            .find({}, { limit: 5, offset: 0 });
-          const page2 = await client
-            .from(table)
-            .find({}, { limit: 5, offset: 5 });
-          log(
-            `Pagination: Page 1: ${page1.length} records, Page 2: ${page2.length} records`
-          );
-        });
-      };
-
-      window.testSorting = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Sorting", async () => {
-          const result = await client
-            .from(table)
-            .find({}, { order: "name.desc" });
-          log(`Sorting: ${result.length} records sorted by name (descending)`);
-        });
-      };
-
-      window.testFiltering = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const table = document.getElementById("tableName").value;
-
-        await runTest("Filtering", async () => {
-          const result = await client.from(table).find({ name: "like.%John%" });
-          log(`Filtering: Found ${result.length} records containing 'John'`);
-        });
-      };
-
-      window.testRPC = async function () {
-        if (!client) return alert("Initialize SDK first");
-        const functionName = document.getElementById("rpcFunction").value;
-        const params = JSON.parse(document.getElementById("rpcParams").value);
-
-        await runTest("RPC Function", async () => {
-          const result = await client.rpc(functionName, params);
-          log(`RPC: Function ${functionName} executed successfully`);
-        });
-      };
-
-      // Initialize stats display
-      updateStats();
     </script>
   </body>
 </html>
