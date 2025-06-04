@@ -32,44 +32,71 @@ export class EncryptionManager {
 
   _initializeReactNativeCrypto() {
     try {
-      const crypto = require("expo-crypto");
+      // Prefer react-native-crypto because it provides a Node compatible crypto API
+      const crypto = require("react-native-crypto");
       return {
-        type: "expo-crypto",
+        type: "react-native-crypto",
         api: crypto,
         getRandomValues: (array) => {
-          const randomBytes = crypto.getRandomBytes(array.length);
+          const bytes = crypto.randomBytes(array.length);
           for (let i = 0; i < array.length; i++) {
-            array[i] = randomBytes[i];
+            array[i] = bytes[i];
           }
           return array;
         },
         supportsEncryption: true,
+        async encrypt(data, key) {
+          const iv = crypto.randomBytes(12);
+          const cipher = crypto.createCipheriv(
+            "aes-256-gcm",
+            Buffer.from(key, "hex"),
+            iv
+          );
+          const encrypted = Buffer.concat([
+            cipher.update(JSON.stringify(data)),
+            cipher.final(),
+          ]);
+          const tag = cipher.getAuthTag();
+          const result = Buffer.concat([iv, tag, encrypted]);
+          return {
+            version: 2,
+            algorithm: "aes-256-gcm",
+            data: Buffer.from(result).toString("base64"),
+            encrypted: true,
+          };
+        },
+        async decrypt(payload, key) {
+          const buffer = Buffer.from(payload.data, "base64");
+          const iv = buffer.slice(0, 12);
+          const tag = buffer.slice(12, 28);
+          const encrypted = buffer.slice(28);
+          const decipher = crypto.createDecipheriv(
+            "aes-256-gcm",
+            Buffer.from(key, "hex"),
+            iv
+          );
+          decipher.setAuthTag(tag);
+          const decrypted = Buffer.concat([
+            decipher.update(encrypted),
+            decipher.final(),
+          ]);
+          return JSON.parse(decrypted.toString());
+        },
       };
     } catch {
       try {
-        const { randomBytes, createCipher } = require("react-native-crypto");
+        const expoCrypto = require("expo-crypto");
         return {
-          type: "react-native-crypto",
-          api: { randomBytes, createCipher },
+          type: "expo-crypto",
+          api: expoCrypto,
           getRandomValues: (array) => {
-            const bytes = randomBytes(array.length);
+            const bytes = expoCrypto.getRandomBytes(array.length);
             for (let i = 0; i < array.length; i++) {
               array[i] = bytes[i];
             }
             return array;
           },
-          supportsEncryption: true,
-          async encrypt(data, key) {
-            const cipher = createCipher("aes-256-cbc", key);
-            let encrypted = cipher.update(JSON.stringify(data), "utf8", "hex");
-            encrypted += cipher.final("hex");
-            return {
-              version: 3,
-              algorithm: "aes-256-cbc",
-              data: encrypted,
-              encrypted: true,
-            };
-          },
+          supportsEncryption: false,
         };
       } catch {
         return this._initializeNoCrypto();
@@ -488,17 +515,8 @@ export class EncryptionManager {
 
         const decryptedString = decoder.decode(decryptedBuffer);
         return JSON.parse(decryptedString);
-      } else if (
-        encryptedData.version === 3 &&
-        encryptedData.algorithm === "aes-256-cbc" &&
-        this.cryptoAPI.encrypt
-      ) {
-        // Handle React Native AES decryption
-        const { createDecipher } = require("react-native-crypto");
-        const decipher = createDecipher("aes-256-cbc", this.sessionKey);
-        let decrypted = decipher.update(encryptedData.data, "hex", "utf8");
-        decrypted += decipher.final("utf8");
-        return JSON.parse(decrypted);
+      } else if (this.cryptoAPI.decrypt) {
+        return await this.cryptoAPI.decrypt(encryptedData, this.sessionKey);
       } else {
         throw new SaintCentralEncryptionError(
           `Unsupported encryption algorithm: ${encryptedData.algorithm}`,
