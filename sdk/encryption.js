@@ -142,14 +142,14 @@ export class EncryptionManager {
       getRandomValues: (array) => {
         // INLINE FIX: Direct call, no external function
         if (typeof window !== "undefined" && window.crypto) {
-          return window.crypto.getRandomValues(array);
+          return window.crypto.getRandomValues.call(window.crypto, array);
         } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-          return globalThis.crypto.getRandomValues(array);
+          return globalThis.crypto.getRandomValues.call(globalThis.crypto, array);
         } else {
           try {
             const nodeCrypto = require("crypto");
             const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
-            return webCrypto.getRandomValues(array);
+            return webCrypto.getRandomValues.call(webCrypto, array);
           } catch {
             // Fallback
             for (let i = 0; i < array.length; i++) {
@@ -326,13 +326,19 @@ export class EncryptionManager {
         // Generate IV - direct call
         let iv;
         if (typeof window !== "undefined" && window.crypto) {
-          iv = window.crypto.getRandomValues(new Uint8Array(12));
+          iv = window.crypto.getRandomValues.call(
+            window.crypto,
+            new Uint8Array(12)
+          );
         } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-          iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+          iv = globalThis.crypto.getRandomValues.call(
+            globalThis.crypto,
+            new Uint8Array(12)
+          );
         } else {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
-          iv = webCrypto.getRandomValues(new Uint8Array(12));
+          iv = webCrypto.getRandomValues.call(webCrypto, new Uint8Array(12));
         }
 
         // Create key buffer
@@ -348,7 +354,8 @@ export class EncryptionManager {
           window.crypto &&
           window.crypto.subtle
         ) {
-          cryptoKey = await window.crypto.subtle.importKey(
+          cryptoKey = await window.crypto.subtle.importKey.call(
+            window.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -356,7 +363,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await window.crypto.subtle.encrypt(
+          encryptedBuffer = await window.crypto.subtle.encrypt.call(
+            window.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -366,7 +374,8 @@ export class EncryptionManager {
           globalThis.crypto &&
           globalThis.crypto.subtle
         ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
+          cryptoKey = await globalThis.crypto.subtle.importKey.call(
+            globalThis.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -374,7 +383,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await globalThis.crypto.subtle.encrypt(
+          encryptedBuffer = await globalThis.crypto.subtle.encrypt.call(
+            globalThis.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -383,7 +393,8 @@ export class EncryptionManager {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
 
-          cryptoKey = await webCrypto.subtle.importKey(
+          cryptoKey = await webCrypto.subtle.importKey.call(
+            webCrypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -391,7 +402,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await webCrypto.subtle.encrypt(
+          encryptedBuffer = await webCrypto.subtle.encrypt.call(
+            webCrypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -463,7 +475,8 @@ export class EncryptionManager {
           window.crypto &&
           window.crypto.subtle
         ) {
-          cryptoKey = await window.crypto.subtle.importKey(
+          cryptoKey = await window.crypto.subtle.importKey.call(
+            window.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -471,7 +484,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await window.crypto.subtle.decrypt(
+          decryptedBuffer = await window.crypto.subtle.decrypt.call(
+            window.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
@@ -481,7 +495,8 @@ export class EncryptionManager {
           globalThis.crypto &&
           globalThis.crypto.subtle
         ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
+          cryptoKey = await globalThis.crypto.subtle.importKey.call(
+            globalThis.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -489,7 +504,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await globalThis.crypto.subtle.decrypt(
+          decryptedBuffer = await globalThis.crypto.subtle.decrypt.call(
+            globalThis.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
@@ -498,7 +514,8 @@ export class EncryptionManager {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
 
-          cryptoKey = await webCrypto.subtle.importKey(
+          cryptoKey = await webCrypto.subtle.importKey.call(
+            webCrypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -506,7 +523,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await webCrypto.subtle.decrypt(
+          decryptedBuffer = await webCrypto.subtle.decrypt.call(
+            webCrypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
