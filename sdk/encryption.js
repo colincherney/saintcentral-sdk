@@ -32,44 +32,71 @@ export class EncryptionManager {
 
   _initializeReactNativeCrypto() {
     try {
-      const crypto = require("expo-crypto");
+      // Prefer react-native-crypto because it provides a Node compatible crypto API
+      const crypto = require("react-native-crypto");
       return {
-        type: "expo-crypto",
+        type: "react-native-crypto",
         api: crypto,
         getRandomValues: (array) => {
-          const randomBytes = crypto.getRandomBytes(array.length);
+          const bytes = crypto.randomBytes(array.length);
           for (let i = 0; i < array.length; i++) {
-            array[i] = randomBytes[i];
+            array[i] = bytes[i];
           }
           return array;
         },
         supportsEncryption: true,
+        async encrypt(data, key) {
+          const iv = crypto.randomBytes(12);
+          const cipher = crypto.createCipheriv(
+            "aes-256-gcm",
+            Buffer.from(key, "hex"),
+            iv
+          );
+          const encrypted = Buffer.concat([
+            cipher.update(JSON.stringify(data)),
+            cipher.final(),
+          ]);
+          const tag = cipher.getAuthTag();
+          const result = Buffer.concat([iv, tag, encrypted]);
+          return {
+            version: 2,
+            algorithm: "aes-256-gcm",
+            data: Buffer.from(result).toString("base64"),
+            encrypted: true,
+          };
+        },
+        async decrypt(payload, key) {
+          const buffer = Buffer.from(payload.data, "base64");
+          const iv = buffer.slice(0, 12);
+          const tag = buffer.slice(12, 28);
+          const encrypted = buffer.slice(28);
+          const decipher = crypto.createDecipheriv(
+            "aes-256-gcm",
+            Buffer.from(key, "hex"),
+            iv
+          );
+          decipher.setAuthTag(tag);
+          const decrypted = Buffer.concat([
+            decipher.update(encrypted),
+            decipher.final(),
+          ]);
+          return JSON.parse(decrypted.toString());
+        },
       };
     } catch {
       try {
-        const { randomBytes, createCipher } = require("react-native-crypto");
+        const expoCrypto = require("expo-crypto");
         return {
-          type: "react-native-crypto",
-          api: { randomBytes, createCipher },
+          type: "expo-crypto",
+          api: expoCrypto,
           getRandomValues: (array) => {
-            const bytes = randomBytes(array.length);
+            const bytes = expoCrypto.getRandomBytes(array.length);
             for (let i = 0; i < array.length; i++) {
               array[i] = bytes[i];
             }
             return array;
           },
-          supportsEncryption: true,
-          async encrypt(data, key) {
-            const cipher = createCipher("aes-256-cbc", key);
-            let encrypted = cipher.update(JSON.stringify(data), "utf8", "hex");
-            encrypted += cipher.final("hex");
-            return {
-              version: 3,
-              algorithm: "aes-256-cbc",
-              data: encrypted,
-              encrypted: true,
-            };
-          },
+          supportsEncryption: false,
         };
       } catch {
         return this._initializeNoCrypto();
@@ -115,14 +142,14 @@ export class EncryptionManager {
       getRandomValues: (array) => {
         // INLINE FIX: Direct call, no external function
         if (typeof window !== "undefined" && window.crypto) {
-          return window.crypto.getRandomValues(array);
+          return window.crypto.getRandomValues.call(window.crypto, array);
         } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-          return globalThis.crypto.getRandomValues(array);
+          return globalThis.crypto.getRandomValues.call(globalThis.crypto, array);
         } else {
           try {
             const nodeCrypto = require("crypto");
             const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
-            return webCrypto.getRandomValues(array);
+            return webCrypto.getRandomValues.call(webCrypto, array);
           } catch {
             // Fallback
             for (let i = 0; i < array.length; i++) {
@@ -299,13 +326,19 @@ export class EncryptionManager {
         // Generate IV - direct call
         let iv;
         if (typeof window !== "undefined" && window.crypto) {
-          iv = window.crypto.getRandomValues(new Uint8Array(12));
+          iv = window.crypto.getRandomValues.call(
+            window.crypto,
+            new Uint8Array(12)
+          );
         } else if (typeof globalThis !== "undefined" && globalThis.crypto) {
-          iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+          iv = globalThis.crypto.getRandomValues.call(
+            globalThis.crypto,
+            new Uint8Array(12)
+          );
         } else {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
-          iv = webCrypto.getRandomValues(new Uint8Array(12));
+          iv = webCrypto.getRandomValues.call(webCrypto, new Uint8Array(12));
         }
 
         // Create key buffer
@@ -321,7 +354,8 @@ export class EncryptionManager {
           window.crypto &&
           window.crypto.subtle
         ) {
-          cryptoKey = await window.crypto.subtle.importKey(
+          cryptoKey = await window.crypto.subtle.importKey.call(
+            window.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -329,7 +363,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await window.crypto.subtle.encrypt(
+          encryptedBuffer = await window.crypto.subtle.encrypt.call(
+            window.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -339,7 +374,8 @@ export class EncryptionManager {
           globalThis.crypto &&
           globalThis.crypto.subtle
         ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
+          cryptoKey = await globalThis.crypto.subtle.importKey.call(
+            globalThis.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -347,7 +383,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await globalThis.crypto.subtle.encrypt(
+          encryptedBuffer = await globalThis.crypto.subtle.encrypt.call(
+            globalThis.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -356,7 +393,8 @@ export class EncryptionManager {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
 
-          cryptoKey = await webCrypto.subtle.importKey(
+          cryptoKey = await webCrypto.subtle.importKey.call(
+            webCrypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -364,7 +402,8 @@ export class EncryptionManager {
             ["encrypt"]
           );
 
-          encryptedBuffer = await webCrypto.subtle.encrypt(
+          encryptedBuffer = await webCrypto.subtle.encrypt.call(
+            webCrypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             dataBuffer
@@ -436,7 +475,8 @@ export class EncryptionManager {
           window.crypto &&
           window.crypto.subtle
         ) {
-          cryptoKey = await window.crypto.subtle.importKey(
+          cryptoKey = await window.crypto.subtle.importKey.call(
+            window.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -444,7 +484,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await window.crypto.subtle.decrypt(
+          decryptedBuffer = await window.crypto.subtle.decrypt.call(
+            window.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
@@ -454,7 +495,8 @@ export class EncryptionManager {
           globalThis.crypto &&
           globalThis.crypto.subtle
         ) {
-          cryptoKey = await globalThis.crypto.subtle.importKey(
+          cryptoKey = await globalThis.crypto.subtle.importKey.call(
+            globalThis.crypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -462,7 +504,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await globalThis.crypto.subtle.decrypt(
+          decryptedBuffer = await globalThis.crypto.subtle.decrypt.call(
+            globalThis.crypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
@@ -471,7 +514,8 @@ export class EncryptionManager {
           const nodeCrypto = require("crypto");
           const webCrypto = nodeCrypto.webcrypto || nodeCrypto;
 
-          cryptoKey = await webCrypto.subtle.importKey(
+          cryptoKey = await webCrypto.subtle.importKey.call(
+            webCrypto.subtle,
             "raw",
             keyBuffer,
             { name: "AES-GCM" },
@@ -479,7 +523,8 @@ export class EncryptionManager {
             ["decrypt"]
           );
 
-          decryptedBuffer = await webCrypto.subtle.decrypt(
+          decryptedBuffer = await webCrypto.subtle.decrypt.call(
+            webCrypto.subtle,
             { name: "AES-GCM", iv },
             cryptoKey,
             encrypted
@@ -488,17 +533,8 @@ export class EncryptionManager {
 
         const decryptedString = decoder.decode(decryptedBuffer);
         return JSON.parse(decryptedString);
-      } else if (
-        encryptedData.version === 3 &&
-        encryptedData.algorithm === "aes-256-cbc" &&
-        this.cryptoAPI.encrypt
-      ) {
-        // Handle React Native AES decryption
-        const { createDecipher } = require("react-native-crypto");
-        const decipher = createDecipher("aes-256-cbc", this.sessionKey);
-        let decrypted = decipher.update(encryptedData.data, "hex", "utf8");
-        decrypted += decipher.final("utf8");
-        return JSON.parse(decrypted);
+      } else if (this.cryptoAPI.decrypt) {
+        return await this.cryptoAPI.decrypt(encryptedData, this.sessionKey);
       } else {
         throw new SaintCentralEncryptionError(
           `Unsupported encryption algorithm: ${encryptedData.algorithm}`,
