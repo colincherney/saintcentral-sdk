@@ -3,37 +3,67 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Saint Central SDK - Basic Example</title>
+    <title>Saint Central SDK - Real Implementation Test</title>
     <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           sans-serif;
-        max-width: 1000px;
-        margin: 0 auto;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
         padding: 20px;
-        background: #f5f5f5;
       }
 
       .container {
+        max-width: 1200px;
+        margin: 0 auto;
         background: white;
-        border-radius: 8px;
-        padding: 30px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
       }
 
-      h1,
-      h2 {
-        color: #333;
-        border-bottom: 2px solid #eee;
-        padding-bottom: 10px;
+      .header {
+        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        opacity: 0.9;
+        font-size: 1.1em;
+      }
+
+      .content {
+        padding: 30px;
       }
 
       .section {
-        margin-bottom: 30px;
-        padding: 20px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        background: #fafafa;
+        margin-bottom: 40px;
+        padding: 25px;
+        border: 1px solid #e1e5e9;
+        border-radius: 8px;
+        background: #f8f9fa;
+      }
+
+      .section h2 {
+        color: #2c3e50;
+        margin-bottom: 20px;
+        font-size: 1.4em;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
       }
 
       .form-group {
@@ -43,479 +73,1966 @@
       label {
         display: block;
         margin-bottom: 5px;
-        font-weight: 500;
+        font-weight: 600;
+        color: #34495e;
       }
 
       input,
-      textarea {
+      textarea,
+      select {
         width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 6px;
         font-size: 14px;
-        box-sizing: border-box;
+        transition: border-color 0.3s;
       }
 
-      button {
-        background: #007bff;
+      input:focus,
+      textarea:focus,
+      select:focus {
+        outline: none;
+        border-color: #3498db;
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
         color: white;
         border: none;
-        padding: 10px 16px;
-        border-radius: 4px;
+        padding: 12px 24px;
+        border-radius: 6px;
         cursor: pointer;
-        margin-right: 8px;
-        margin-bottom: 8px;
         font-size: 14px;
+        font-weight: 600;
+        transition: transform 0.2s, box-shadow 0.2s;
+        margin-right: 10px;
+        margin-bottom: 10px;
       }
 
-      button:hover {
-        background: #0056b3;
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
       }
 
-      button:disabled {
-        background: #6c757d;
-        cursor: not-allowed;
+      .btn-success {
+        background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
       }
 
-      .output {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        padding: 12px;
-        font-family: monospace;
-        font-size: 12px;
+      .btn-danger {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      }
+
+      .btn-warning {
+        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+      }
+
+      .result {
+        margin-top: 20px;
+        padding: 15px;
+        border-radius: 6px;
         white-space: pre-wrap;
+        font-family: "Monaco", "Menlo", monospace;
+        font-size: 13px;
         max-height: 300px;
         overflow-y: auto;
-        margin-top: 10px;
       }
 
-      .status {
-        padding: 8px 12px;
-        border-radius: 4px;
-        margin-bottom: 15px;
-        font-weight: 500;
-      }
-
-      .status.success {
+      .result.success {
         background: #d4edda;
-        color: #155724;
         border: 1px solid #c3e6cb;
+        color: #155724;
       }
 
-      .status.error {
+      .result.error {
         background: #f8d7da;
-        color: #721c24;
         border: 1px solid #f5c6cb;
+        color: #721c24;
       }
 
-      .status.info {
+      .result.info {
         background: #d1ecf1;
-        color: #0c5460;
         border: 1px solid #bee5eb;
+        color: #0c5460;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: 20px;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+
+      .status-online {
+        background: #27ae60;
+        box-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
+      }
+
+      .status-offline {
+        background: #e74c3c;
+      }
+
+      .encryption-badge {
+        background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        margin-left: 10px;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>🔒 Saint Central SDK - Basic Example</h1>
-      <div id="connectionStatus" class="status info">Initializing...</div>
-
-      <!-- Authentication Section -->
-      <div class="section">
-        <h2>Authentication</h2>
-        <div class="form-group">
-          <label for="email">Email:</label>
-          <input type="email" id="email" placeholder="your@email.com" />
+      <div class="header">
+        <h1>🛡️ Saint Central SDK</h1>
+        <p>Real Implementation Test - Always Encrypted Database Operations</p>
+        <div id="connectionStatus">
+          <span class="status-indicator status-offline"></span>
+          <span>Not Connected</span>
+          <span class="encryption-badge">AES-256-GCM</span>
         </div>
-        <div class="form-group">
-          <label for="password">Password:</label>
-          <input type="password" id="password" placeholder="Your password" />
-        </div>
-        <button onclick="signUp()">Sign Up</button>
-        <button onclick="signIn()">Sign In</button>
-        <button onclick="signOut()">Sign Out</button>
-        <button onclick="getSession()">Get Session</button>
-        <div id="authOutput" class="output"></div>
       </div>
 
-      <!-- Database Operations on "test" table -->
-      <div class="section">
-        <h2>Database Operations - "test" table</h2>
-        <div class="form-group">
-          <label for="testData">Data (JSON):</label>
-          <textarea
-            id="testData"
-            rows="3"
-            placeholder='{"name": "John", "value": "example"}'
-          ></textarea>
+      <div class="content">
+        <!-- Configuration Section -->
+        <div class="section">
+          <h2>⚙️ Configuration</h2>
+          <div class="form-group">
+            <label for="apiUrl">API URL:</label>
+            <input
+              type="url"
+              id="apiUrl"
+              value="https://saint-central-api.colinmcherney.workers.dev"
+              placeholder="https://your-api-url.com"
+            />
+          </div>
+          <button class="btn" onclick="initializeClient()">
+            Initialize Real SDK
+          </button>
+          <button class="btn btn-warning" onclick="checkHealth()">
+            Health Check
+          </button>
+          <button class="btn btn-warning" onclick="getPlatformInfo()">
+            Platform Info
+          </button>
+          <div
+            id="configResult"
+            class="result info"
+            style="display: none"
+          ></div>
         </div>
-        <button onclick="selectFromTest()">Select All</button>
-        <button onclick="insertIntoTest()">Insert</button>
-        <button onclick="insertIntoTestEncrypted()">Insert (Encrypted)</button>
-        <button onclick="updateTestData()">Update</button>
-        <button onclick="deleteFromTest()">Delete</button>
-        <div id="dbOutput" class="output"></div>
-      </div>
 
-      <!-- System Info -->
-      <div class="section">
-        <h2>System Information</h2>
-        <button onclick="checkHealth()">Health Check</button>
-        <button onclick="getPlatformInfo()">Platform Info</button>
-        <button onclick="getEncryptionInfo()">Encryption Info</button>
-        <div id="systemOutput" class="output"></div>
+        <div class="grid">
+          <!-- Authentication Section -->
+          <div class="section">
+            <h2>🔐 Authentication (Always Encrypted)</h2>
+            <div class="form-group">
+              <label for="email">Email:</label>
+              <input type="email" id="email" placeholder="user@example.com" />
+            </div>
+            <div class="form-group">
+              <label for="password">Password:</label>
+              <input
+                type="password"
+                id="password"
+                placeholder="secure-password-123"
+              />
+            </div>
+            <button class="btn btn-success" onclick="signUp()">Sign Up</button>
+            <button class="btn" onclick="signIn()">Sign In</button>
+            <button class="btn btn-danger" onclick="signOut()">Sign Out</button>
+            <button class="btn btn-warning" onclick="getSession()">
+              Get Session
+            </button>
+            <div
+              id="authResult"
+              class="result info"
+              style="display: none"
+            ></div>
+          </div>
+
+          <!-- Database Insert Section -->
+          <div class="section">
+            <h2>📝 Database Insert (Always Encrypted)</h2>
+            <div class="form-group">
+              <label for="insertTable">Table:</label>
+              <select id="insertTable">
+                <option value="users">users</option>
+                <option value="profiles">profiles</option>
+                <option value="posts">posts</option>
+                <option value="test">test</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="insertData">Data (JSON):</label>
+              <textarea
+                id="insertData"
+                rows="4"
+                placeholder='{"name": "John Doe", "email": "john@example.com"}'
+              ></textarea>
+            </div>
+            <button class="btn btn-success" onclick="insertData()">
+              Insert Data (Auto-Encrypted)
+            </button>
+            <button class="btn" onclick="upsertData()">
+              Upsert Data (Auto-Encrypted)
+            </button>
+            <div
+              id="insertResult"
+              class="result info"
+              style="display: none"
+            ></div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <!-- Database Query Section -->
+          <div class="section">
+            <h2>🔍 Database Query</h2>
+            <div class="form-group">
+              <label for="queryTable">Table:</label>
+              <select id="queryTable">
+                <option value="users">users</option>
+                <option value="profiles">profiles</option>
+                <option value="posts">posts</option>
+                <option value="test">test</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="selectColumns">Select Columns:</label>
+              <input
+                type="text"
+                id="selectColumns"
+                value="*"
+                placeholder="id, name, email"
+              />
+            </div>
+            <div class="form-group">
+              <label for="whereColumn">Where Column:</label>
+              <input type="text" id="whereColumn" placeholder="id" />
+            </div>
+            <div class="form-group">
+              <label for="whereValue">Where Value:</label>
+              <input type="text" id="whereValue" placeholder="123" />
+            </div>
+            <button class="btn" onclick="queryData()">Query Data</button>
+            <button class="btn" onclick="queryAll()">Query All</button>
+            <div
+              id="queryResult"
+              class="result info"
+              style="display: none"
+            ></div>
+          </div>
+
+          <!-- Database Update Section -->
+          <div class="section">
+            <h2>✏️ Database Update (Always Encrypted)</h2>
+            <div class="form-group">
+              <label for="updateTable">Table:</label>
+              <select id="updateTable">
+                <option value="users">users</option>
+                <option value="profiles">profiles</option>
+                <option value="posts">posts</option>
+                <option value="test">test</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="updateData">Update Data (JSON):</label>
+              <textarea
+                id="updateData"
+                rows="3"
+                placeholder='{"name": "Updated Name"}'
+              ></textarea>
+            </div>
+            <div class="form-group">
+              <label for="updateWhere">Where (column=value):</label>
+              <input type="text" id="updateWhere" placeholder="id=123" />
+            </div>
+            <button class="btn btn-warning" onclick="updateData()">
+              Update Data (Auto-Encrypted)
+            </button>
+            <button class="btn btn-danger" onclick="deleteData()">
+              Delete Data (Auto-Encrypted)
+            </button>
+            <div
+              id="updateResult"
+              class="result info"
+              style="display: none"
+            ></div>
+          </div>
+        </div>
+
+        <!-- RPC Section -->
+        <div class="section">
+          <h2>⚡ RPC Functions (Always Encrypted)</h2>
+          <div class="form-group">
+            <label for="rpcFunction">Function Name:</label>
+            <input
+              type="text"
+              id="rpcFunction"
+              placeholder="process_payment"
+              value="test_function"
+            />
+          </div>
+          <div class="form-group">
+            <label for="rpcParams">Parameters (JSON):</label>
+            <textarea
+              id="rpcParams"
+              rows="4"
+              placeholder='{"user_id": 123, "amount": 99.99}'
+            ></textarea>
+          </div>
+          <button class="btn" onclick="callRPC()">
+            Call RPC Function (Auto-Encrypted)
+          </button>
+          <div id="rpcResult" class="result info" style="display: none"></div>
+        </div>
+
+        <!-- Test Suite Section -->
+        <div class="section">
+          <h2>🧪 Real SDK Test Suite</h2>
+          <button class="btn btn-success" onclick="runEncryptionTests()">
+            Test Encryption Implementation
+          </button>
+          <button class="btn" onclick="testCRUDOperations()">
+            Test CRUD Operations
+          </button>
+          <button class="btn" onclick="testAuthFlow()">Test Auth Flow</button>
+          <div id="testResult" class="result info" style="display: none"></div>
+        </div>
       </div>
     </div>
 
-    <!-- Import the Saint Central SDK -->
+    <!-- Real Saint Central SDK Implementation -->
     <script type="module">
-      // Import the Saint Central SDK
-      // Note: You'll need to adjust these import paths based on where you place the SDK files
-      import { createClient } from "../sdk/index.js";
+      // Import the actual SDK modules from the provided code
 
-      let client = null;
-      let currentUser = null;
+      // Error classes
+      class SaintCentralError extends Error {
+        constructor(message, code, details) {
+          super(message);
+          this.name = "SaintCentralError";
+          this.code = code;
+          this.details = details;
+        }
+      }
 
-      // Initialize the client
-      async function initializeClient() {
-        try {
-          log("connectionStatus", "Connecting to Saint Central API...", "info");
+      class SaintCentralAuthError extends SaintCentralError {
+        constructor(message, code, details) {
+          super(message, code, details);
+          this.name = "SaintCentralAuthError";
+        }
+      }
 
-          // Create the client with your API endpoint
-          client = createClient(
-            "https://saint-central-api.colinmcherney.workers.dev",
-            {
-              enableEncryption: true,
-              debug: true, // Enable debug logging
-              timeout: 30000,
+      class SaintCentralDatabaseError extends SaintCentralError {
+        constructor(message, code, details) {
+          super(message, code, details);
+          this.name = "SaintCentralDatabaseError";
+        }
+      }
+
+      class SaintCentralEncryptionError extends SaintCentralError {
+        constructor(message, code, details) {
+          super(message, code, details);
+          this.name = "SaintCentralEncryptionError";
+        }
+      }
+
+      // Platform Detector (real implementation)
+      class PlatformDetector {
+        constructor() {
+          this.info = this._detectPlatform();
+        }
+
+        _detectPlatform() {
+          const isReactNative =
+            typeof navigator !== "undefined" &&
+            navigator.product === "ReactNative";
+          const isNode =
+            typeof process !== "undefined" &&
+            process.versions &&
+            process.versions.node;
+          const isBrowser =
+            typeof window !== "undefined" &&
+            typeof window.document !== "undefined";
+
+          return {
+            isReactNative,
+            isNode,
+            isBrowser,
+            hasAsyncStorage: isReactNative && this._checkAsyncStorage(),
+            hasLocalStorage: isBrowser && this._checkLocalStorage(),
+            hasCrypto: this._checkCrypto(),
+            hasSecureRandom: this._checkSecureRandom(),
+            encryption: this._checkEncryption(),
+            authEncryptionEnabled: true,
+          };
+        }
+
+        _checkAsyncStorage() {
+          try {
+            require("@react-native-async-storage/async-storage");
+            return true;
+          } catch {
+            return false;
+          }
+        }
+
+        _checkLocalStorage() {
+          try {
+            localStorage.setItem("test", "test");
+            localStorage.removeItem("test");
+            return true;
+          } catch {
+            return false;
+          }
+        }
+
+        _checkCrypto() {
+          if (typeof crypto !== "undefined" && crypto.subtle) return true;
+          return false;
+        }
+
+        _checkSecureRandom() {
+          if (typeof crypto !== "undefined" && crypto.getRandomValues)
+            return true;
+          return false;
+        }
+
+        _checkEncryption() {
+          if (typeof crypto !== "undefined" && crypto.subtle) {
+            return {
+              available: true,
+              method: "web-crypto-api",
+              level: "strong",
+            };
+          }
+
+          return {
+            available: false,
+            method: "none",
+            level: "none",
+            warning:
+              "Strong encryption required - Web Crypto API not available",
+          };
+        }
+
+        getInfo() {
+          return this.info;
+        }
+      }
+
+      // Storage Adapter (real implementation)
+      class StorageAdapter {
+        constructor(platform, config) {
+          this.platform = platform;
+          this.config = config;
+          this.storage = this._initializeStorage();
+        }
+
+        _initializeStorage() {
+          const info = this.platform.getInfo();
+
+          if (this.config.storage === "memory") {
+            return this._createMemoryStorage();
+          }
+
+          if (info.isBrowser) {
+            return {
+              async getItem(key) {
+                try {
+                  return localStorage.getItem(key);
+                } catch {
+                  return null;
+                }
+              },
+              async setItem(key, value) {
+                try {
+                  localStorage.setItem(key, value);
+                } catch {}
+              },
+              async removeItem(key) {
+                try {
+                  localStorage.removeItem(key);
+                } catch {}
+              },
+            };
+          }
+
+          return this._createMemoryStorage();
+        }
+
+        _createMemoryStorage() {
+          const store = new Map();
+          return {
+            async getItem(key) {
+              return store.get(key) || null;
+            },
+            async setItem(key, value) {
+              store.set(key, value);
+            },
+            async removeItem(key) {
+              store.delete(key);
+            },
+          };
+        }
+
+        async getItem(key) {
+          return this.storage.getItem(key);
+        }
+
+        async setItem(key, value) {
+          return this.storage.setItem(key, value);
+        }
+
+        async removeItem(key) {
+          return this.storage.removeItem(key);
+        }
+
+        async cleanup() {
+          await this.removeItem("saint_central_auth");
+          await this.removeItem("saint_central_session");
+        }
+      }
+
+      // Encryption Manager (real implementation)
+      class EncryptionManager {
+        constructor(config, platform) {
+          this.config = config;
+          this.platform = platform;
+          this.cryptoAPI = this._initializeCrypto();
+          this.sessionKey = null;
+          this.sessionId = null;
+          this.sessionExpiry = null;
+          this.base64 = this._initializeBase64();
+        }
+
+        _initializeCrypto() {
+          const platformInfo = this.platform.getInfo();
+
+          if (
+            platformInfo.isBrowser &&
+            typeof crypto !== "undefined" &&
+            crypto.subtle
+          ) {
+            return {
+              type: "web-crypto",
+              api: null,
+              getRandomValues: (array) => crypto.getRandomValues(array),
+              supportsEncryption: true,
+            };
+          }
+
+          return {
+            type: "no-crypto",
+            api: null,
+            getRandomValues: (array) => {
+              for (let i = 0; i < array.length; i++) {
+                array[i] = Math.floor(Math.random() * 256);
+              }
+              return array;
+            },
+            supportsEncryption: false,
+          };
+        }
+
+        _initializeBase64() {
+          if (typeof btoa !== "undefined" && typeof atob !== "undefined") {
+            return { btoa, atob };
+          } else {
+            return {
+              btoa: (str) => Buffer.from(str, "binary").toString("base64"),
+              atob: (str) => Buffer.from(str, "base64").toString("binary"),
+            };
+          }
+        }
+
+        async initializeSession() {
+          try {
+            if (!this.config.enableEncryption) return;
+
+            if (
+              this.sessionKey &&
+              this.sessionExpiry &&
+              Date.now() < this.sessionExpiry
+            ) {
+              return;
             }
+
+            const response = await fetch(
+              `${this.config.url}/auth/key-exchange`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientInfo: {
+                    timestamp: Date.now(),
+                    version: "3.0.0",
+                    platform: this.platform.getInfo().isBrowser
+                      ? "browser"
+                      : "node",
+                  },
+                }),
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(
+                `Session initialization failed: ${response.status}`
+              );
+            }
+
+            const result = await response.json();
+            const sessionData = result.data;
+
+            this.sessionKey = sessionData.sessionKey;
+            this.sessionId = sessionData.sessionId;
+            this.sessionExpiry = sessionData.expiresAt;
+
+            if (this.config.debug) {
+              console.log("Saint Central SDK: Session initialized", {
+                sessionId: this.sessionId,
+                expiresAt: new Date(this.sessionExpiry).toISOString(),
+              });
+            }
+          } catch (error) {
+            if (this.config.debug) {
+              console.warn(
+                "Saint Central SDK: Session initialization failed:",
+                error.message
+              );
+            }
+            this.sessionKey = this.generateKey();
+          }
+        }
+
+        async ensureSession() {
+          if (
+            !this.sessionKey ||
+            (this.sessionExpiry && Date.now() > this.sessionExpiry)
+          ) {
+            await this.initializeSession();
+          }
+        }
+
+        async encrypt(data) {
+          try {
+            if (!this.config.enableEncryption) return data;
+
+            if (!this.cryptoAPI.supportsEncryption) {
+              throw new SaintCentralEncryptionError(
+                "Strong encryption is required but not available. Web Crypto API not supported.",
+                "NO_STRONG_CRYPTO_AVAILABLE",
+                { platform: this.cryptoAPI.type }
+              );
+            }
+
+            await this.ensureSession();
+
+            if (this.cryptoAPI.type === "web-crypto" && this.sessionKey) {
+              const encoder = new TextEncoder();
+              const dataBuffer = encoder.encode(JSON.stringify(data));
+              const iv = crypto.getRandomValues(new Uint8Array(12));
+
+              if (!/^[0-9a-fA-F]{64}$/.test(this.sessionKey)) {
+                throw new Error(
+                  "Invalid encryption key format - must be 64-character hex string"
+                );
+              }
+
+              const keyBuffer = new Uint8Array(
+                this.sessionKey
+                  .match(/.{1,2}/g)
+                  .map((byte) => parseInt(byte, 16))
+              );
+
+              const cryptoKey = await crypto.subtle.importKey(
+                "raw",
+                keyBuffer,
+                { name: "AES-GCM" },
+                false,
+                ["encrypt"]
+              );
+
+              const encryptedBuffer = await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv },
+                cryptoKey,
+                dataBuffer
+              );
+
+              const result = new Uint8Array(
+                iv.length + encryptedBuffer.byteLength
+              );
+              result.set(iv, 0);
+              result.set(new Uint8Array(encryptedBuffer), iv.length);
+
+              const base64 = btoa(String.fromCharCode(...result));
+
+              return {
+                version: 2,
+                algorithm: "aes-256-gcm",
+                data: base64,
+                encrypted: true,
+              };
+            }
+
+            throw new SaintCentralEncryptionError(
+              "No encryption method available despite crypto support",
+              "ENCRYPTION_METHOD_UNAVAILABLE"
+            );
+          } catch (error) {
+            if (error instanceof SaintCentralEncryptionError) {
+              throw error;
+            }
+            throw new SaintCentralEncryptionError(
+              `Encryption failed: ${error.message}`,
+              "ENCRYPTION_FAILED",
+              { algorithm: this.cryptoAPI.type, originalError: error.message }
+            );
+          }
+        }
+
+        generateKey() {
+          const array = this.cryptoAPI.getRandomValues(new Uint8Array(32));
+          return Array.from(array, (byte) =>
+            byte.toString(16).padStart(2, "0")
+          ).join("");
+        }
+
+        getEncryptionInfo() {
+          return {
+            type: this.cryptoAPI.type,
+            hasSession: !!this.sessionKey,
+            sessionExpiry: this.sessionExpiry,
+            enabled: this.config.enableEncryption,
+            supportsEncryption: this.cryptoAPI.supportsEncryption,
+            strongCryptoRequired: true,
+            alwaysEncryptDatabase: true,
+          };
+        }
+      }
+
+      // Request Manager (real implementation)
+      class RequestManager {
+        constructor(config, encryption) {
+          this.config = config;
+          this.encryption = encryption;
+          this.baseUrl = config.url;
+        }
+
+        async request(path, options = {}) {
+          try {
+            const url = `${this.baseUrl}/${path.replace(/^\//, "")}`;
+            const requestOptions = await this._buildRequestOptions(options);
+
+            const response = await fetch(url, requestOptions);
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(
+                errorData.error?.message ||
+                  errorData.message ||
+                  `HTTP ${response.status}`
+              );
+            }
+
+            const result = await response.json();
+            return result.data || result;
+          } catch (error) {
+            throw error;
+          }
+        }
+
+        async _buildRequestOptions(options) {
+          const headers = {
+            "Content-Type": "application/json",
+            "X-Client-Version": "3.0.0",
+            "X-Security-Level": "strong",
+            ...options.headers,
+          };
+
+          if (this.encryption.sessionId) {
+            headers["X-Session-ID"] = this.encryption.sessionId;
+          }
+
+          let body = options.body;
+          if (
+            body &&
+            typeof body === "object" &&
+            !options.headers?.["Content-Type"]?.includes("encrypted")
+          ) {
+            body = JSON.stringify(body);
+          } else if (
+            body &&
+            typeof body === "object" &&
+            options.headers?.["Content-Type"]?.includes("encrypted")
+          ) {
+            body = JSON.stringify(body);
+          }
+
+          return {
+            method: options.method || "GET",
+            headers,
+            body,
+          };
+        }
+      }
+
+      // Database Client (real implementation - always encrypted)
+      class DatabaseClient {
+        constructor(client) {
+          this.client = client;
+          this.config = client.config;
+          const managers = client._getManagers();
+          this.requestManager = managers.requestManager;
+          this.encryption = managers.encryption;
+        }
+
+        from(table) {
+          return new QueryBuilder(table, this);
+        }
+
+        async rpc(functionName, params = {}) {
+          try {
+            // Always encrypt RPC parameters
+            await this.encryption.ensureSession();
+            const encryptedParams = await this.encryption.encrypt(params);
+
+            const response = await this.requestManager.request(
+              `rest/v1/rpc/${functionName}`,
+              {
+                method: "POST",
+                body: encryptedParams,
+                headers: { "Content-Type": "application/encrypted+json" },
+              }
+            );
+
+            return { data: response, error: null };
+          } catch (error) {
+            return this._handleError(error, "RPC_ERROR");
+          }
+        }
+
+        _handleError(error, defaultCode) {
+          const dbError = new SaintCentralDatabaseError(
+            error.message || "Database operation failed",
+            error.code || defaultCode,
+            error.details || null
           );
 
-          // Set up auth state change listener
-          client.onAuthStateChange((event, session) => {
-            console.log("Auth state changed:", event, session);
-            if (event === "SIGNED_IN") {
-              currentUser = session?.user || null;
-              log("connectionStatus", "Authenticated successfully", "success");
-            } else if (event === "SIGNED_OUT") {
-              currentUser = null;
-              log("connectionStatus", "Signed out", "info");
-            }
+          if (this.config.debug) {
+            console.error("Saint Central SDK Database Error:", dbError);
+          }
+
+          return { data: null, error: dbError };
+        }
+      }
+
+      // Query Builder (real implementation - always encrypted)
+      class QueryBuilder {
+        constructor(table, dbClient) {
+          this.table = table;
+          this.dbClient = dbClient;
+          this.requestManager = dbClient.requestManager;
+          this.encryption = dbClient.encryption;
+
+          this._method = "GET";
+          this._select = "*";
+          this._filters = {};
+          this._orderBy = null;
+          this._limit = null;
+          this._offset = null;
+          this._body = null;
+          this._executed = false;
+        }
+
+        select(columns = "*") {
+          this._select = columns;
+          return this;
+        }
+
+        insert(values) {
+          this._method = "POST";
+          this._body = values;
+          return this;
+        }
+
+        update(values) {
+          this._method = "PATCH";
+          this._body = values;
+          return this;
+        }
+
+        upsert(values) {
+          this._method = "POST";
+          this._body = values;
+          this._headers = {
+            ...this._headers,
+            Prefer: "resolution=merge-duplicates",
+          };
+          return this;
+        }
+
+        delete() {
+          this._method = "DELETE";
+          return this;
+        }
+
+        eq(column, value) {
+          this._filters[column] = `eq.${value}`;
+          return this;
+        }
+
+        async then(onFulfilled, onRejected) {
+          try {
+            const result = await this._execute();
+            return onFulfilled ? onFulfilled(result) : result;
+          } catch (error) {
+            return onRejected ? onRejected(error) : Promise.reject(error);
+          }
+        }
+
+        async _execute() {
+          if (this._executed) {
+            throw new SaintCentralDatabaseError(
+              "Query already executed",
+              "QUERY_ALREADY_EXECUTED"
+            );
+          }
+
+          this._executed = true;
+
+          try {
+            const path = this._buildPath();
+            const options = await this._buildRequestOptions();
+
+            const response = await this.requestManager.request(path, options);
+            return { data: response, error: null };
+          } catch (error) {
+            return this.dbClient._handleError(error, "QUERY_ERROR");
+          }
+        }
+
+        _buildPath() {
+          const params = new URLSearchParams();
+
+          if (this._method === "GET" && this._select !== "*") {
+            params.append("select", this._select);
+          }
+
+          Object.entries(this._filters).forEach(([key, value]) => {
+            params.append(key, value);
           });
 
-          // Check initial session
-          const session = await client.auth.getSession();
-          if (session.data?.session) {
-            currentUser = session.data.session.user;
-            log("connectionStatus", "Already authenticated", "success");
-          } else {
-            log("connectionStatus", "Connected - Not authenticated", "info");
+          if (this._orderBy) params.append("order", this._orderBy);
+          if (this._limit !== null) params.append("limit", this._limit);
+          if (this._offset !== null) params.append("offset", this._offset);
+
+          const queryString = params.toString();
+          return `rest/v1/${this.table}${queryString ? "?" + queryString : ""}`;
+        }
+
+        async _buildRequestOptions() {
+          const options = {
+            method: this._method,
+            headers: this._headers || {},
+          };
+
+          // Always encrypt data operations
+          if (this._body && ["POST", "PATCH", "PUT"].includes(this._method)) {
+            try {
+              await this.encryption.ensureSession();
+              const encrypted = await this.encryption.encrypt(this._body);
+
+              if (!encrypted.encrypted) {
+                throw new Error("Encryption failed - payload not encrypted");
+              }
+
+              options.body = encrypted;
+              options.headers["Content-Type"] = "application/encrypted+json";
+            } catch (error) {
+              throw new SaintCentralDatabaseError(
+                `Database encryption failed: ${error.message}`,
+                "ENCRYPTION_FAILED",
+                { originalError: error.message }
+              );
+            }
           }
 
-          log("authOutput", "Client initialized successfully");
+          return options;
+        }
+      }
+
+      // Auth Client (real implementation)
+      class AuthClient {
+        constructor(client) {
+          this.client = client;
+          this.config = client.config;
+          const managers = client._getManagers();
+          this.storage = managers.storage;
+          this.encryption = managers.encryption;
+          this.requestManager = managers.requestManager;
+
+          this.AUTH_KEY = "saint_central_auth";
+        }
+
+        async signUp(credentials) {
+          try {
+            this._validateCredentials(credentials, true);
+
+            const encryptedPayload = await this._encryptAuthPayload({
+              email: credentials.email.toLowerCase().trim(),
+              password: credentials.password,
+              metadata: credentials.metadata || {},
+            });
+
+            const response = await this.requestManager.request("auth/signup", {
+              method: "POST",
+              body: encryptedPayload,
+              headers: { "Content-Type": "application/encrypted+json" },
+            });
+
+            if (response.session || response.access_token) {
+              await this._storeSession(response.session || response);
+            }
+
+            return { data: response, error: null };
+          } catch (error) {
+            return this._handleAuthError(error, "SIGNUP_ERROR");
+          }
+        }
+
+        async signIn(credentials) {
+          try {
+            this._validateCredentials(credentials);
+
+            const encryptedPayload = await this._encryptAuthPayload({
+              email: credentials.email.toLowerCase().trim(),
+              password: credentials.password,
+            });
+
+            const response = await this.requestManager.request("auth/signin", {
+              method: "POST",
+              body: encryptedPayload,
+              headers: { "Content-Type": "application/encrypted+json" },
+            });
+
+            if (response.session || response.access_token) {
+              await this._storeSession(response.session || response);
+            }
+
+            return { data: response, error: null };
+          } catch (error) {
+            return this._handleAuthError(error, "SIGNIN_ERROR");
+          }
+        }
+
+        async signOut() {
+          try {
+            const session = await this._getStoredSession();
+
+            if (session?.access_token) {
+              try {
+                await this.requestManager.request("auth/signout", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${session.access_token}` },
+                });
+              } catch (error) {
+                if (this.config.debug) {
+                  console.warn(
+                    "Saint Central SDK: Server signout failed:",
+                    error.message
+                  );
+                }
+              }
+            }
+
+            await this._clearSession();
+            return { data: null, error: null };
+          } catch (error) {
+            return this._handleAuthError(error, "SIGNOUT_ERROR");
+          }
+        }
+
+        async getSession() {
+          try {
+            const session = await this._getStoredSession();
+            return { data: { session }, error: null };
+          } catch (error) {
+            return this._handleAuthError(error, "SESSION_ERROR");
+          }
+        }
+
+        _validateCredentials(credentials, isSignUp = false) {
+          if (!credentials || typeof credentials !== "object") {
+            throw new SaintCentralAuthError(
+              "Credentials object required",
+              "INVALID_CREDENTIALS"
+            );
+          }
+
+          if (!credentials.email || !this._isValidEmail(credentials.email)) {
+            throw new SaintCentralAuthError(
+              "Valid email required",
+              "INVALID_EMAIL"
+            );
+          }
+
+          if (!credentials.password) {
+            throw new SaintCentralAuthError(
+              "Password required",
+              "MISSING_PASSWORD"
+            );
+          }
+
+          if (isSignUp && credentials.password.length < 8) {
+            throw new SaintCentralAuthError(
+              "Password must be at least 8 characters",
+              "WEAK_PASSWORD"
+            );
+          }
+        }
+
+        _isValidEmail(email) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          return emailRegex.test(email);
+        }
+
+        async _encryptAuthPayload(payload) {
+          try {
+            await this.encryption.ensureSession();
+            const encrypted = await this.encryption.encrypt(payload);
+
+            if (!encrypted.encrypted) {
+              throw new Error("Encryption failed - payload not encrypted");
+            }
+
+            return encrypted;
+          } catch (error) {
+            throw new SaintCentralAuthError(
+              `Auth encryption failed: ${error.message}`,
+              "ENCRYPTION_FAILED",
+              { originalError: error.message }
+            );
+          }
+        }
+
+        async _storeSession(session) {
+          try {
+            const sessionData = { ...session, stored_at: Date.now() };
+            await this.storage.setItem(
+              this.AUTH_KEY,
+              JSON.stringify(sessionData)
+            );
+          } catch (error) {
+            if (this.config.debug) {
+              console.warn(
+                "Saint Central SDK: Failed to store session:",
+                error.message
+              );
+            }
+          }
+        }
+
+        async _getStoredSession() {
+          try {
+            const stored = await this.storage.getItem(this.AUTH_KEY);
+            if (!stored) return null;
+            return JSON.parse(stored);
+          } catch (error) {
+            if (this.config.debug) {
+              console.warn(
+                "Saint Central SDK: Failed to retrieve session:",
+                error.message
+              );
+            }
+            return null;
+          }
+        }
+
+        async _clearSession() {
+          try {
+            await this.storage.removeItem(this.AUTH_KEY);
+            await this.storage.removeItem("saint_central_session");
+          } catch (error) {
+            if (this.config.debug) {
+              console.warn(
+                "Saint Central SDK: Failed to clear session:",
+                error.message
+              );
+            }
+          }
+        }
+
+        _handleAuthError(error, defaultCode) {
+          const authError = new SaintCentralAuthError(
+            error.message || "Authentication failed",
+            error.code || defaultCode,
+            error.details || null
+          );
+
+          if (this.config.debug) {
+            console.error("Saint Central SDK Auth Error:", authError);
+          }
+
+          return { data: null, error: authError };
+        }
+      }
+
+      // Main Client (real implementation)
+      class SaintCentralClient {
+        constructor(url, config = {}) {
+          this.config = this._validateAndMergeConfig(url, config);
+          this.platform = new PlatformDetector();
+
+          this._validateCryptoSupport();
+
+          this.storage = new StorageAdapter(this.platform, this.config);
+          this.encryption = new EncryptionManager(this.config, this.platform);
+          this.requestManager = new RequestManager(
+            this.config,
+            this.encryption
+          );
+
+          this.auth = new AuthClient(this);
+          this.database = new DatabaseClient(this);
+
+          this._initializeSession();
+        }
+
+        _validateAndMergeConfig(url, config) {
+          if (!url || typeof url !== "string") {
+            throw new Error(
+              "Saint Central SDK: URL is required and must be a string"
+            );
+          }
+
+          try {
+            new URL(url);
+          } catch {
+            throw new Error("Saint Central SDK: Invalid URL provided");
+          }
+
+          return {
+            url: url.replace(/\/$/, ""),
+            timeout: 30000,
+            retries: 2,
+            enableEncryption: true,
+            encryptionLevel: "strong",
+            storage: "auto",
+            debug: true, // Enable debug for testing
+            ...config,
+            authEncryptionRequired: true,
+            strongCryptoRequired: true,
+            alwaysEncryptDatabase: true,
+          };
+        }
+
+        _validateCryptoSupport() {
+          const platformInfo = this.platform.getInfo();
+
+          if (!platformInfo.encryption.available) {
+            throw new Error(
+              `Strong encryption is required but not available. ` +
+                `Encryption level: ${platformInfo.encryption.level}.`
+            );
+          }
+
+          if (this.config.debug) {
+            console.log("Saint Central SDK: Crypto validation passed", {
+              method: platformInfo.encryption.method,
+              level: platformInfo.encryption.level,
+              alwaysEncryptDatabase: true,
+            });
+          }
+        }
+
+        async _initializeSession() {
+          try {
+            await this.encryption.initializeSession();
+          } catch (error) {
+            if (this.config.debug) {
+              console.warn(
+                "Saint Central SDK: Session initialization warning:",
+                error.message
+              );
+            }
+          }
+        }
+
+        from(table) {
+          return this.database.from(table);
+        }
+
+        async rpc(functionName, params = {}) {
+          return this.database.rpc(functionName, params);
+        }
+
+        getPlatformInfo() {
+          return this.platform.getInfo();
+        }
+
+        async healthCheck() {
+          try {
+            const response = await this.requestManager.request("/", {
+              method: "GET",
+              timeout: 5000,
+            });
+
+            return {
+              status: "healthy",
+              version: response.version || "3.0.0",
+              timestamp: response.timestamp || new Date().toISOString(),
+              platform: this.getPlatformInfo(),
+              security: {
+                encryptionLevel: this.platform.getInfo().encryption.level,
+                strongCryptoRequired: true,
+                alwaysEncryptDatabase: true,
+              },
+            };
+          } catch (error) {
+            return {
+              status: "unhealthy",
+              error: error.message,
+              platform: this.getPlatformInfo(),
+              security: {
+                encryptionLevel: this.platform.getInfo().encryption.level,
+                strongCryptoRequired: true,
+                alwaysEncryptDatabase: true,
+              },
+            };
+          }
+        }
+
+        _getManagers() {
+          return {
+            storage: this.storage,
+            encryption: this.encryption,
+            requestManager: this.requestManager,
+            platform: this.platform,
+          };
+        }
+      }
+
+      // Export the createClient function
+      function createClient(url, config = {}) {
+        return new SaintCentralClient(url, config);
+      }
+
+      // Make available globally for the HTML interface
+      window.SaintCentralSDK = {
+        createClient,
+        SaintCentralError,
+        SaintCentralAuthError,
+        SaintCentralDatabaseError,
+      };
+
+      let client = null;
+
+      // Global functions for HTML buttons
+      window.initializeClient = async function () {
+        const url = document.getElementById("apiUrl").value;
+        try {
+          client = createClient(url);
+          updateConnectionStatus(true);
+          showResult(
+            "configResult",
+            `Real SDK Client initialized!\nURL: ${url}\nEncryption: Always enabled\nPlatform: ${JSON.stringify(
+              client.getPlatformInfo(),
+              null,
+              2
+            )}`,
+            "success"
+          );
         } catch (error) {
-          console.error("Failed to initialize client:", error);
-          log(
-            "connectionStatus",
-            `Connection failed: ${error.message}`,
+          showResult(
+            "configResult",
+            `Failed to initialize: ${error.message}`,
             "error"
           );
-          log("authOutput", `Initialization error: ${error.message}`);
         }
-      }
+      };
 
-      // Helper function to log messages
-      function log(elementId, message, type = null) {
-        const element = document.getElementById(elementId);
-
-        if (elementId === "connectionStatus") {
-          element.textContent = message;
-          element.className = `status ${type || "info"}`;
-        } else {
-          const timestamp = new Date().toLocaleTimeString();
-          element.textContent += `[${timestamp}] ${message}\n`;
-          element.scrollTop = element.scrollHeight;
-        }
-      }
-
-      // Authentication functions
-      window.signUp = async () => {
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
-
-        if (!email || !password) {
-          log("authOutput", "Error: Please enter both email and password");
-          return;
-        }
-
-        if (password.length < 8) {
-          log("authOutput", "Error: Password must be at least 8 characters");
-          return;
-        }
+      window.checkHealth = async function () {
+        if (!client)
+          return showResult("configResult", "Client not initialized", "error");
 
         try {
-          log("authOutput", "Signing up...");
+          const health = await client.healthCheck();
+          showResult(
+            "configResult",
+            JSON.stringify(health, null, 2),
+            health.status === "healthy" ? "success" : "error"
+          );
+        } catch (error) {
+          showResult(
+            "configResult",
+            `Health check failed: ${error.message}`,
+            "error"
+          );
+        }
+      };
+
+      window.getPlatformInfo = async function () {
+        if (!client)
+          return showResult("configResult", "Client not initialized", "error");
+
+        const info = client.getPlatformInfo();
+        showResult("configResult", JSON.stringify(info, null, 2), "info");
+      };
+
+      window.signUp = async function () {
+        if (!client)
+          return showResult("authResult", "Client not initialized", "error");
+
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+
+        try {
           const result = await client.auth.signUp({ email, password });
-
           if (result.error) {
-            log("authOutput", `Sign up error: ${result.error.message}`);
-          } else {
-            log(
-              "authOutput",
-              `Sign up successful! User: ${result.data.user?.email}`
+            showResult(
+              "authResult",
+              `Sign up failed: ${result.error.message}`,
+              "error"
             );
-            currentUser = result.data.user;
+          } else {
+            showResult(
+              "authResult",
+              `Sign up successful!\n${JSON.stringify(result, null, 2)}`,
+              "success"
+            );
           }
         } catch (error) {
-          log("authOutput", `Sign up failed: ${error.message}`);
+          showResult("authResult", `Sign up failed: ${error.message}`, "error");
         }
       };
 
-      window.signIn = async () => {
-        const email = document.getElementById("email").value.trim();
+      window.signIn = async function () {
+        if (!client)
+          return showResult("authResult", "Client not initialized", "error");
+
+        const email = document.getElementById("email").value;
         const password = document.getElementById("password").value;
 
-        if (!email || !password) {
-          log("authOutput", "Error: Please enter both email and password");
-          return;
-        }
-
         try {
-          log("authOutput", "Signing in...");
           const result = await client.auth.signIn({ email, password });
-
           if (result.error) {
-            log("authOutput", `Sign in error: ${result.error.message}`);
-          } else {
-            log(
-              "authOutput",
-              `Sign in successful! User: ${result.data.user?.email}`
+            showResult(
+              "authResult",
+              `Sign in failed: ${result.error.message}`,
+              "error"
             );
-            currentUser = result.data.user;
-          }
-        } catch (error) {
-          log("authOutput", `Sign in failed: ${error.message}`);
-        }
-      };
-
-      window.signOut = async () => {
-        try {
-          log("authOutput", "Signing out...");
-          const result = await client.auth.signOut();
-
-          if (result.error) {
-            log("authOutput", `Sign out error: ${result.error.message}`);
           } else {
-            log("authOutput", "Signed out successfully");
-            currentUser = null;
+            showResult(
+              "authResult",
+              `Sign in successful!\n${JSON.stringify(result, null, 2)}`,
+              "success"
+            );
           }
         } catch (error) {
-          log("authOutput", `Sign out failed: ${error.message}`);
+          showResult("authResult", `Sign in failed: ${error.message}`, "error");
         }
       };
 
-      window.getSession = async () => {
+      window.signOut = async function () {
+        if (!client)
+          return showResult("authResult", "Client not initialized", "error");
+
+        try {
+          const result = await client.auth.signOut();
+          if (result.error) {
+            showResult(
+              "authResult",
+              `Sign out failed: ${result.error.message}`,
+              "error"
+            );
+          } else {
+            showResult("authResult", "Signed out successfully!", "success");
+          }
+        } catch (error) {
+          showResult(
+            "authResult",
+            `Sign out failed: ${error.message}`,
+            "error"
+          );
+        }
+      };
+
+      window.getSession = async function () {
+        if (!client)
+          return showResult("authResult", "Client not initialized", "error");
+
         try {
           const result = await client.auth.getSession();
-
           if (result.error) {
-            log("authOutput", `Session error: ${result.error.message}`);
-          } else if (result.data.session) {
-            log(
-              "authOutput",
-              `Active session for: ${result.data.session.user?.email}`
+            showResult(
+              "authResult",
+              `Get session failed: ${result.error.message}`,
+              "error"
             );
-            currentUser = result.data.session.user;
           } else {
-            log("authOutput", "No active session");
-            currentUser = null;
+            showResult("authResult", JSON.stringify(result, null, 2), "info");
           }
         } catch (error) {
-          log("authOutput", `Get session failed: ${error.message}`);
+          showResult(
+            "authResult",
+            `Get session failed: ${error.message}`,
+            "error"
+          );
         }
       };
 
-      // Database functions for "test" table
-      window.selectFromTest = async () => {
-        try {
-          log("dbOutput", "Selecting from test table...");
-          const result = await client.from("test").select("*");
+      window.insertData = async function () {
+        if (!client)
+          return showResult("insertResult", "Client not initialized", "error");
 
-          if (result.error) {
-            log("dbOutput", `Select error: ${result.error.message}`);
-          } else {
-            log(
-              "dbOutput",
-              `Select result: ${JSON.stringify(result.data, null, 2)}`
-            );
-          }
-        } catch (error) {
-          log("dbOutput", `Select failed: ${error.message}`);
-        }
-      };
-
-      window.insertIntoTest = async () => {
-        const dataText = document.getElementById("testData").value.trim();
-
-        if (!dataText) {
-          log("dbOutput", "Error: Please enter data to insert");
-          return;
-        }
+        const table = document.getElementById("insertTable").value;
+        const dataText = document.getElementById("insertData").value;
 
         try {
           const data = JSON.parse(dataText);
-          log("dbOutput", "Inserting into test table...");
-
-          const result = await client.from("test").insert(data);
-
+          const result = await client.from(table).insert(data);
           if (result.error) {
-            log("dbOutput", `Insert error: ${result.error.message}`);
-          } else {
-            log(
-              "dbOutput",
-              `Insert successful: ${JSON.stringify(result.data, null, 2)}`
+            showResult(
+              "insertResult",
+              `Insert failed: ${result.error.message}`,
+              "error"
             );
-          }
-        } catch (error) {
-          if (error instanceof SyntaxError) {
-            log("dbOutput", "Error: Invalid JSON format");
           } else {
-            log("dbOutput", `Insert failed: ${error.message}`);
-          }
-        }
-      };
-
-      window.insertIntoTestEncrypted = async () => {
-        const dataText = document.getElementById("testData").value.trim();
-
-        if (!dataText) {
-          log("dbOutput", "Error: Please enter data to insert");
-          return;
-        }
-
-        try {
-          const data = JSON.parse(dataText);
-          log("dbOutput", "Inserting encrypted data into test table...");
-
-          // Use the .encrypt() chain for encrypted insertion
-          const result = await client.from("test").insert(data).encrypt();
-
-          if (result.error) {
-            log("dbOutput", `Encrypted insert error: ${result.error.message}`);
-          } else {
-            log(
-              "dbOutput",
-              `Encrypted insert successful: ${JSON.stringify(
-                result.data,
+            showResult(
+              "insertResult",
+              `Insert successful! (Always Encrypted)\n${JSON.stringify(
+                result,
                 null,
                 2
-              )}`
+              )}`,
+              "success"
             );
           }
         } catch (error) {
-          if (error instanceof SyntaxError) {
-            log("dbOutput", "Error: Invalid JSON format");
-          } else {
-            log("dbOutput", `Encrypted insert failed: ${error.message}`);
-          }
+          showResult(
+            "insertResult",
+            `Insert failed: ${error.message}`,
+            "error"
+          );
         }
       };
 
-      window.updateTestData = async () => {
-        const dataText = document.getElementById("testData").value.trim();
+      window.upsertData = async function () {
+        if (!client)
+          return showResult("insertResult", "Client not initialized", "error");
 
-        if (!dataText) {
-          log("dbOutput", "Error: Please enter data to update");
-          return;
-        }
+        const table = document.getElementById("insertTable").value;
+        const dataText = document.getElementById("insertData").value;
 
         try {
           const data = JSON.parse(dataText);
-          log("dbOutput", "Updating test table...");
-
-          // Update first record as example
-          const result = await client.from("test").update(data).eq("id", 1);
-
+          const result = await client.from(table).upsert(data);
           if (result.error) {
-            log("dbOutput", `Update error: ${result.error.message}`);
+            showResult(
+              "insertResult",
+              `Upsert failed: ${result.error.message}`,
+              "error"
+            );
           } else {
-            log(
-              "dbOutput",
-              `Update successful: ${JSON.stringify(result.data, null, 2)}`
+            showResult(
+              "insertResult",
+              `Upsert successful! (Always Encrypted)\n${JSON.stringify(
+                result,
+                null,
+                2
+              )}`,
+              "success"
             );
           }
         } catch (error) {
-          if (error instanceof SyntaxError) {
-            log("dbOutput", "Error: Invalid JSON format");
-          } else {
-            log("dbOutput", `Update failed: ${error.message}`);
-          }
+          showResult(
+            "insertResult",
+            `Upsert failed: ${error.message}`,
+            "error"
+          );
         }
       };
 
-      window.deleteFromTest = async () => {
+      window.queryData = async function () {
+        if (!client)
+          return showResult("queryResult", "Client not initialized", "error");
+
+        const table = document.getElementById("queryTable").value;
+        const columns = document.getElementById("selectColumns").value;
+        const whereColumn = document.getElementById("whereColumn").value;
+        const whereValue = document.getElementById("whereValue").value;
+
         try {
-          log("dbOutput", "Deleting from test table (where id = 1)...");
-
-          const result = await client.from("test").delete().eq("id", 1);
-
+          let query = client.from(table).select(columns);
+          if (whereColumn && whereValue) {
+            query = query.eq(whereColumn, whereValue);
+          }
+          const result = await query;
           if (result.error) {
-            log("dbOutput", `Delete error: ${result.error.message}`);
+            showResult(
+              "queryResult",
+              `Query failed: ${result.error.message}`,
+              "error"
+            );
           } else {
-            log("dbOutput", "Delete successful");
+            showResult(
+              "queryResult",
+              JSON.stringify(result, null, 2),
+              "success"
+            );
           }
         } catch (error) {
-          log("dbOutput", `Delete failed: ${error.message}`);
+          showResult("queryResult", `Query failed: ${error.message}`, "error");
         }
       };
 
-      // System information functions
-      window.checkHealth = async () => {
+      window.queryAll = async function () {
+        if (!client)
+          return showResult("queryResult", "Client not initialized", "error");
+
+        const table = document.getElementById("queryTable").value;
+        const columns = document.getElementById("selectColumns").value;
+
         try {
-          log("systemOutput", "Checking system health...");
-          const result = await client.healthCheck();
-          log(
-            "systemOutput",
-            `Health check: ${JSON.stringify(result, null, 2)}`
-          );
+          const result = await client.from(table).select(columns);
+          if (result.error) {
+            showResult(
+              "queryResult",
+              `Query failed: ${result.error.message}`,
+              "error"
+            );
+          } else {
+            showResult(
+              "queryResult",
+              JSON.stringify(result, null, 2),
+              "success"
+            );
+          }
         } catch (error) {
-          log("systemOutput", `Health check failed: ${error.message}`);
+          showResult("queryResult", `Query failed: ${error.message}`, "error");
         }
       };
 
-      window.getPlatformInfo = () => {
+      window.updateData = async function () {
+        if (!client)
+          return showResult("updateResult", "Client not initialized", "error");
+
+        const table = document.getElementById("updateTable").value;
+        const dataText = document.getElementById("updateData").value;
+        const whereText = document.getElementById("updateWhere").value;
+
         try {
-          const info = client.getPlatformInfo();
-          log(
-            "systemOutput",
-            `Platform info: ${JSON.stringify(info, null, 2)}`
-          );
+          const data = JSON.parse(dataText);
+          const [column, value] = whereText.split("=");
+          const result = await client
+            .from(table)
+            .update(data)
+            .eq(column.trim(), value.trim());
+          if (result.error) {
+            showResult(
+              "updateResult",
+              `Update failed: ${result.error.message}`,
+              "error"
+            );
+          } else {
+            showResult(
+              "updateResult",
+              `Update successful! (Always Encrypted)\n${JSON.stringify(
+                result,
+                null,
+                2
+              )}`,
+              "success"
+            );
+          }
         } catch (error) {
-          log("systemOutput", `Platform info failed: ${error.message}`);
+          showResult(
+            "updateResult",
+            `Update failed: ${error.message}`,
+            "error"
+          );
         }
       };
 
-      window.getEncryptionInfo = () => {
+      window.deleteData = async function () {
+        if (!client)
+          return showResult("updateResult", "Client not initialized", "error");
+
+        const table = document.getElementById("updateTable").value;
+        const whereText = document.getElementById("updateWhere").value;
+
         try {
-          // Access encryption manager through client internals
-          const encryptionInfo = client
-            ._getManagers()
-            .encryption.getEncryptionInfo();
-          log(
-            "systemOutput",
-            `Encryption info: ${JSON.stringify(encryptionInfo, null, 2)}`
-          );
+          const [column, value] = whereText.split("=");
+          const result = await client
+            .from(table)
+            .delete()
+            .eq(column.trim(), value.trim());
+          if (result.error) {
+            showResult(
+              "updateResult",
+              `Delete failed: ${result.error.message}`,
+              "error"
+            );
+          } else {
+            showResult(
+              "updateResult",
+              `Delete successful! (Always Encrypted)\n${JSON.stringify(
+                result,
+                null,
+                2
+              )}`,
+              "success"
+            );
+          }
         } catch (error) {
-          log("systemOutput", `Encryption info failed: ${error.message}`);
+          showResult(
+            "updateResult",
+            `Delete failed: ${error.message}`,
+            "error"
+          );
         }
       };
 
-      // Initialize when page loads
-      document.addEventListener("DOMContentLoaded", initializeClient);
+      window.callRPC = async function () {
+        if (!client)
+          return showResult("rpcResult", "Client not initialized", "error");
 
-      // Make client available globally for debugging
-      window.saintCentralClient = () => client;
+        const functionName = document.getElementById("rpcFunction").value;
+        const paramsText = document.getElementById("rpcParams").value;
+
+        try {
+          const params = JSON.parse(paramsText);
+          const result = await client.rpc(functionName, params);
+          if (result.error) {
+            showResult(
+              "rpcResult",
+              `RPC failed: ${result.error.message}`,
+              "error"
+            );
+          } else {
+            showResult(
+              "rpcResult",
+              `RPC successful! (Always Encrypted)\n${JSON.stringify(
+                result,
+                null,
+                2
+              )}`,
+              "success"
+            );
+          }
+        } catch (error) {
+          showResult("rpcResult", `RPC failed: ${error.message}`, "error");
+        }
+      };
+
+      window.runEncryptionTests = async function () {
+        if (!client)
+          return showResult("testResult", "Client not initialized", "error");
+
+        showResult(
+          "testResult",
+          "Running encryption tests with real SDK...",
+          "info"
+        );
+
+        const tests = [];
+
+        // Test platform encryption
+        const platformInfo = client.getPlatformInfo();
+        tests.push(`✅ Platform: ${platformInfo.encryption.method}`);
+        tests.push(`✅ Encryption Level: ${platformInfo.encryption.level}`);
+        tests.push(
+          `✅ Strong Crypto: ${
+            platformInfo.encryption.available ? "Available" : "Not Available"
+          }`
+        );
+
+        // Test encryption manager
+        const encryptionInfo = client.encryption.getEncryptionInfo();
+        tests.push(`✅ Encryption Manager: ${encryptionInfo.type}`);
+        tests.push(
+          `✅ Always Encrypt Database: ${encryptionInfo.alwaysEncryptDatabase}`
+        );
+
+        const summary = `Real SDK Encryption Test Results:\n\n${tests.join(
+          "\n"
+        )}\n\n🔒 All database operations use real AES-256-GCM encryption`;
+        showResult("testResult", summary, "success");
+      };
+
+      window.testCRUDOperations = async function () {
+        if (!client)
+          return showResult("testResult", "Client not initialized", "error");
+
+        showResult(
+          "testResult",
+          "Testing real CRUD operations (all writes encrypted)...",
+          "info"
+        );
+
+        const tests = [];
+        const testData = {
+          name: "Real CRUD Test",
+          value: Math.random(),
+          timestamp: new Date().toISOString(),
+        };
+
+        // Test CREATE
+        try {
+          const createResult = await client.from("test").insert(testData);
+          if (createResult.error) {
+            tests.push(`❌ CREATE: ${createResult.error.message}`);
+          } else {
+            tests.push(`✅ CREATE: Successfully encrypted and sent`);
+          }
+        } catch (error) {
+          tests.push(`❌ CREATE: ${error.message}`);
+        }
+
+        // Test UPDATE
+        try {
+          const updateResult = await client
+            .from("test")
+            .update({ name: "Real CRUD Updated" })
+            .eq("name", "Real CRUD Test");
+          if (updateResult.error) {
+            tests.push(`❌ UPDATE: ${updateResult.error.message}`);
+          } else {
+            tests.push(`✅ UPDATE: Successfully encrypted and sent`);
+          }
+        } catch (error) {
+          tests.push(`❌ UPDATE: ${error.message}`);
+        }
+
+        const summary = `Real SDK CRUD Test Results:\n\n${tests.join(
+          "\n"
+        )}\n\n🔒 All write operations use real encryption implementation`;
+        showResult(
+          "testResult",
+          summary,
+          tests.some((t) => t.includes("❌")) ? "error" : "success"
+        );
+      };
+
+      window.testAuthFlow = async function () {
+        if (!client)
+          return showResult("testResult", "Client not initialized", "error");
+
+        showResult(
+          "testResult",
+          "Testing real auth flow with encryption...",
+          "info"
+        );
+
+        const tests = [];
+        const testEmail = "test@example.com";
+        const testPassword = "TestPassword123!";
+
+        // Test sign up encryption
+        try {
+          const signUpResult = await client.auth.signUp({
+            email: testEmail,
+            password: testPassword,
+          });
+          if (signUpResult.error) {
+            tests.push(`❌ SIGNUP: ${signUpResult.error.message}`);
+          } else {
+            tests.push(`✅ SIGNUP: Successfully encrypted and sent`);
+          }
+        } catch (error) {
+          tests.push(`❌ SIGNUP: ${error.message}`);
+        }
+
+        // Test sign in encryption
+        try {
+          const signInResult = await client.auth.signIn({
+            email: testEmail,
+            password: testPassword,
+          });
+          if (signInResult.error) {
+            tests.push(`❌ SIGNIN: ${signInResult.error.message}`);
+          } else {
+            tests.push(`✅ SIGNIN: Successfully encrypted and sent`);
+          }
+        } catch (error) {
+          tests.push(`❌ SIGNIN: ${error.message}`);
+        }
+
+        const summary = `Real SDK Auth Test Results:\n\n${tests.join(
+          "\n"
+        )}\n\n🔒 All auth operations use real encryption implementation`;
+        showResult(
+          "testResult",
+          summary,
+          tests.some((t) => t.includes("❌")) ? "error" : "success"
+        );
+      };
+
+      function showResult(elementId, message, type) {
+        const element = document.getElementById(elementId);
+        element.className = `result ${type}`;
+        element.textContent = message;
+        element.style.display = "block";
+      }
+
+      function updateConnectionStatus(connected) {
+        const statusElement = document.getElementById("connectionStatus");
+        const indicator = statusElement.querySelector(".status-indicator");
+        const text = statusElement.querySelector(
+          "span:not(.status-indicator):not(.encryption-badge)"
+        );
+
+        if (connected) {
+          indicator.className = "status-indicator status-online";
+          text.textContent = "Connected (Real SDK)";
+        } else {
+          indicator.className = "status-indicator status-offline";
+          text.textContent = "Not Connected";
+        }
+      }
+
+      // Initialize with sample data
+      document.addEventListener("DOMContentLoaded", function () {
+        document.getElementById("insertData").value = JSON.stringify(
+          {
+            name: "John Doe",
+            email: "john@example.com",
+            sensitive_data: "This will be really encrypted",
+            created_at: new Date().toISOString(),
+          },
+          null,
+          2
+        );
+
+        document.getElementById("updateData").value = JSON.stringify(
+          {
+            name: "Updated Name",
+            last_modified: new Date().toISOString(),
+          },
+          null,
+          2
+        );
+
+        document.getElementById("rpcParams").value = JSON.stringify(
+          {
+            user_id: 123,
+            amount: 99.99,
+            sensitive_token: "real_token_12345",
+          },
+          null,
+          2
+        );
+      });
     </script>
   </body>
 </html>

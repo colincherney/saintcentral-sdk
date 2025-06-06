@@ -1,5 +1,6 @@
 /**
  * Saint Central SDK - Secure Client Factory
+ * All database operations are automatically encrypted
  * @version 3.0.0
  */
 
@@ -60,6 +61,7 @@ export class SaintCentralClient {
       ...config,
       authEncryptionRequired: true, // Always required
       strongCryptoRequired: true, // No weak fallbacks
+      alwaysEncryptDatabase: true, // NEW: Database operations always encrypted
     };
   }
 
@@ -82,6 +84,7 @@ export class SaintCentralClient {
       console.log("Saint Central SDK: Crypto validation passed", {
         method: platformInfo.encryption.method,
         level: platformInfo.encryption.level,
+        alwaysEncryptDatabase: true,
       });
     }
   }
@@ -103,12 +106,12 @@ export class SaintCentralClient {
     }
   }
 
-  // Database operations
+  // Database operations (all automatically encrypted)
   from(table) {
     return this.database.from(table);
   }
 
-  // RPC function calls
+  // RPC function calls (all automatically encrypted)
   async rpc(functionName, params = {}) {
     return this.database.rpc(functionName, params);
   }
@@ -185,6 +188,7 @@ export class SaintCentralClient {
         security: {
           encryptionLevel: this.platform.getInfo().encryption.level,
           strongCryptoRequired: true,
+          alwaysEncryptDatabase: true, // NEW: Indicate database encryption is always on
         },
       };
     } catch (error) {
@@ -192,6 +196,11 @@ export class SaintCentralClient {
         status: "unhealthy",
         error: error.message,
         platform: this.getPlatformInfo(),
+        security: {
+          encryptionLevel: this.platform.getInfo().encryption.level,
+          strongCryptoRequired: true,
+          alwaysEncryptDatabase: true,
+        },
       };
     }
   }

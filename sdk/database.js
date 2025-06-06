@@ -1,6 +1,6 @@
 /**
  * Saint Central SDK - Secure Database Client
- * Supabase-compatible API with optional .encrypt() chain
+ * Supabase-compatible API with mandatory encryption for all operations
  * @version 3.0.0
  */
 
@@ -21,11 +21,16 @@ export class DatabaseClient {
 
   async rpc(functionName, params = {}) {
     try {
+      // Always encrypt RPC parameters
+      await this.encryption.ensureSession();
+      const encryptedParams = await this.encryption.encrypt(params);
+
       const response = await this.requestManager.request(
         `rest/v1/rpc/${functionName}`,
         {
           method: "POST",
-          body: params,
+          body: encryptedParams,
+          headers: { "Content-Type": "application/encrypted+json" },
         }
       );
 
@@ -65,7 +70,6 @@ export class QueryBuilder {
     this._limit = null;
     this._offset = null;
     this._body = null;
-    this._shouldEncrypt = false;
     this._executed = false;
   }
 
@@ -177,12 +181,6 @@ export class QueryBuilder {
     return this;
   }
 
-  // Encryption toggle - key feature for strong security
-  encrypt() {
-    this._shouldEncrypt = true;
-    return this;
-  }
-
   // Execution methods
   async then(onFulfilled, onRejected) {
     try {
@@ -281,27 +279,24 @@ export class QueryBuilder {
       headers: this._headers || {},
     };
 
+    // Always encrypt data operations
     if (this._body && ["POST", "PATCH", "PUT"].includes(this._method)) {
-      if (this._shouldEncrypt) {
-        try {
-          await this.encryption.ensureSession();
-          const encrypted = await this.encryption.encrypt(this._body);
+      try {
+        await this.encryption.ensureSession();
+        const encrypted = await this.encryption.encrypt(this._body);
 
-          if (!encrypted.encrypted) {
-            throw new Error("Encryption failed - payload not encrypted");
-          }
-
-          options.body = encrypted;
-          options.headers["Content-Type"] = "application/encrypted+json";
-        } catch (error) {
-          throw new SaintCentralDatabaseError(
-            `Database encryption failed: ${error.message}`,
-            "ENCRYPTION_FAILED",
-            { originalError: error.message }
-          );
+        if (!encrypted.encrypted) {
+          throw new Error("Encryption failed - payload not encrypted");
         }
-      } else {
-        options.body = this._body;
+
+        options.body = encrypted;
+        options.headers["Content-Type"] = "application/encrypted+json";
+      } catch (error) {
+        throw new SaintCentralDatabaseError(
+          `Database encryption failed: ${error.message}`,
+          "ENCRYPTION_FAILED",
+          { originalError: error.message }
+        );
       }
     }
 

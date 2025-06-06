@@ -1,5 +1,6 @@
 /**
  * Saint Central SDK - Secure TypeScript Definitions
+ * All database operations are automatically encrypted
  * @version 3.0.0
  */
 
@@ -130,8 +131,7 @@ export interface QueryBuilder<T = any> {
   offset(count: number): QueryBuilder<T>;
   range(from: number, to: number): QueryBuilder<T>;
 
-  // Encryption (key security feature)
-  encrypt(): QueryBuilder<T>;
+  // NOTE: .encrypt() method removed - all operations are automatically encrypted
 
   // Execution
   then<TResult1 = SaintCentralResponse<T[]>, TResult2 = never>(
@@ -210,6 +210,7 @@ export interface SaintCentralClient {
     security: {
       encryptionLevel: string;
       strongCryptoRequired: true;
+      alwaysEncryptDatabase: true;
     };
   }>;
   onAuthStateChange(
@@ -240,6 +241,7 @@ export interface EncryptionAdapter {
     enabled: boolean;
     supportsEncryption: boolean;
     strongCryptoRequired: true;
+    alwaysEncryptDatabase: true;
   };
 }
 
@@ -318,6 +320,7 @@ export interface SecurityValidation {
   encryptionMethod: string;
   warnings: string[];
   recommendations: InstallInstructions[];
+  alwaysEncryptDatabase: true;
 }
 
 // Default export
