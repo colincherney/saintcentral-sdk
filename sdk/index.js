@@ -7,11 +7,7 @@ export { createClient, SaintCentralClient } from "./client.js";
 export { AuthClient } from "./auth.js";
 export { DatabaseClient, QueryBuilder } from "./database.js";
 export { EncryptionManager } from "./encryption.js";
-export {
-  StorageAdapter,
-  RequestManager,
-  PlatformDetector,
-} from "./infrastructure.js";
+export { StorageAdapter, RequestManager, PlatformDetector } from "./infrastructure.js";
 
 // Error classes
 export {

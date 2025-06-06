@@ -103,7 +103,7 @@ export type QueryOperator =
   | "phfts"
   | "wfts";
 
-export interface QueryBuilder<T = any> {
+export interface QueryBuilder<T = any> extends PromiseLike<SaintCentralResponse<T[]>> {
   select(columns?: string): QueryBuilder<T>;
   insert(values: Partial<T> | Partial<T>[]): QueryBuilder<T>;
   update(values: Partial<T>): QueryBuilder<T>;
@@ -123,10 +123,7 @@ export interface QueryBuilder<T = any> {
   is(column: keyof T, value: null | boolean): QueryBuilder<T>;
 
   // Modifiers
-  order(
-    column: keyof T,
-    options?: { ascending?: boolean; nullsFirst?: boolean }
-  ): QueryBuilder<T>;
+  order(column: keyof T, options?: { ascending?: boolean; nullsFirst?: boolean }): QueryBuilder<T>;
   limit(count: number): QueryBuilder<T>;
   offset(count: number): QueryBuilder<T>;
   range(from: number, to: number): QueryBuilder<T>;
@@ -134,13 +131,6 @@ export interface QueryBuilder<T = any> {
   // NOTE: .encrypt() method removed - all operations are automatically encrypted
 
   // Execution
-  then<TResult1 = SaintCentralResponse<T[]>, TResult2 = never>(
-    onfulfilled?:
-      | ((value: SaintCentralResponse<T[]>) => TResult1 | PromiseLike<TResult1>)
-      | null,
-    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
-  ): Promise<TResult1 | TResult2>;
-
   single(): Promise<SaintCentralResponse<T>>;
   maybeSingle(): Promise<SaintCentralResponse<T>>;
 }
@@ -163,13 +153,50 @@ export interface PlatformInfo {
   authEncryptionEnabled: true; // Always true
 }
 
-// Encryption Types (Secure versions only)
+// Encryption Types (Updated for new secure encryption module)
 export interface EncryptedData {
-  version: 2 | 3; // Removed version 1 (XOR)
+  version: 2 | 3; // Added version 3 for new encryption module
   algorithm: "aes-256-gcm" | "aes-256-cbc"; // Only strong algorithms
   data: string;
-  iv?: string;
+  iv: string; // Required for version 3
   encrypted: true;
+}
+
+export interface EncryptionConfig {
+  keySize: 256; // AES key size in bits
+  ivSize: 96; // GCM IV size in bits (12 bytes)
+  tagSize: 128; // GCM authentication tag size in bits (16 bytes)
+}
+
+export interface PlatformCrypto {
+  type: "web-crypto" | "node-crypto" | "expo-crypto" | "unsupported";
+  encrypt(data: string, key: Uint8Array): Promise<EncryptedData>;
+  decrypt(encryptedData: EncryptedData, key: Uint8Array): Promise<string>;
+  generateKey(): Promise<Uint8Array>;
+  generateIV(): Uint8Array;
+}
+
+export interface EncryptionTestResult {
+  success: boolean;
+  platform: string;
+  error?: string;
+}
+
+export interface PlatformCapabilities {
+  type: string;
+  capabilities: string[];
+}
+
+// Updated Secure Encryption Interface
+export interface SecureEncryptionInterface {
+  encrypt(data: any, key?: Uint8Array): Promise<EncryptedData>;
+  decrypt(encryptedData: EncryptedData, key: Uint8Array): Promise<any>;
+  generateKey(): Promise<Uint8Array>;
+  generateKeyBase64(): Promise<string>;
+  keyFromBase64(base64Key: string): Uint8Array;
+  isEncrypted(data: any): data is EncryptedData;
+  getPlatformInfo(): PlatformCapabilities;
+  test(): Promise<EncryptionTestResult>;
 }
 
 // Client Interfaces
@@ -185,19 +212,13 @@ export interface AuthClient {
 
 export interface DatabaseClient {
   from<T = any>(table: string): QueryBuilder<T>;
-  rpc<T = any>(
-    fn: string,
-    params?: Record<string, any>
-  ): Promise<SaintCentralResponse<T>>;
+  rpc<T = any>(fn: string, params?: Record<string, any>): Promise<SaintCentralResponse<T>>;
 }
 
 export interface SaintCentralClient {
   auth: AuthClient;
   from<T = any>(table: string): QueryBuilder<T>;
-  rpc<T = any>(
-    fn: string,
-    params?: Record<string, any>
-  ): Promise<SaintCentralResponse<T>>;
+  rpc<T = any>(fn: string, params?: Record<string, any>): Promise<SaintCentralResponse<T>>;
 
   // Utility methods
   getUser(): Promise<AuthUser | null>;
@@ -214,7 +235,7 @@ export interface SaintCentralClient {
     };
   }>;
   onAuthStateChange(
-    callback: (event: AuthChangeEvent, session: AuthSession | null) => void
+    callback: (event: AuthChangeEvent, session: AuthSession | null) => void,
   ): () => void;
   destroy(): Promise<void>;
 }
@@ -227,6 +248,7 @@ export interface StorageAdapter {
   cleanup(): Promise<void>;
 }
 
+// Updated Encryption Adapter (Legacy compatibility)
 export interface EncryptionAdapter {
   encrypt(data: any): Promise<EncryptedData>;
   decrypt(encryptedData: EncryptedData): Promise<any>;
@@ -273,18 +295,33 @@ export declare class SaintCentralEncryptionError extends SaintCentralError {
   constructor(message: string, code?: string, details?: any);
 }
 
+// New Secure Encryption Error Class
+export declare class EncryptionError extends Error {
+  constructor(message: string, code: string, platform?: string);
+  code: string;
+  platform?: string;
+}
+
+// Secure Encryption Class Declaration
+export declare class SecureEncryption implements SecureEncryptionInterface {
+  constructor();
+  encrypt(data: any, key?: Uint8Array): Promise<EncryptedData>;
+  decrypt(encryptedData: EncryptedData, key: Uint8Array): Promise<any>;
+  generateKey(): Promise<Uint8Array>;
+  generateKeyBase64(): Promise<string>;
+  keyFromBase64(base64Key: string): Uint8Array;
+  isEncrypted(data: any): data is EncryptedData;
+  getPlatformInfo(): PlatformCapabilities;
+  test(): Promise<EncryptionTestResult>;
+}
+
 // Main exports
 export declare const createClient: CreateClientFunction;
 export declare const version: string;
+export declare const encryption: SecureEncryption;
 
 // Utility Types
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 // React Native specific (Updated for security)
 export interface ReactNativeDependencies {

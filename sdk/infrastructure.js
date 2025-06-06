@@ -14,14 +14,9 @@ export class PlatformDetector {
   }
 
   _detectPlatform() {
-    const isReactNative =
-      typeof navigator !== "undefined" && navigator.product === "ReactNative";
-    const isNode =
-      typeof process !== "undefined" &&
-      process.versions &&
-      process.versions.node;
-    const isBrowser =
-      typeof window !== "undefined" && typeof window.document !== "undefined";
+    const isReactNative = typeof navigator !== "undefined" && navigator.product === "ReactNative";
+    const isNode = typeof process !== "undefined" && process.versions && process.versions.node;
+    const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
 
     return {
       isReactNative,
@@ -234,8 +229,7 @@ export class StorageAdapter {
 
     if (info.isReactNative) {
       try {
-        const AsyncStorage =
-          require("@react-native-async-storage/async-storage").default;
+        const AsyncStorage = require("@react-native-async-storage/async-storage").default;
         return {
           async getItem(key) {
             try {
@@ -257,9 +251,7 @@ export class StorageAdapter {
         };
       } catch {
         if (this.config.debug) {
-          console.warn(
-            "Saint Central SDK: AsyncStorage not available, using memory storage"
-          );
+          console.warn("Saint Central SDK: AsyncStorage not available, using memory storage");
         }
         return this._createMemoryStorage();
       }
@@ -341,8 +333,7 @@ export class RequestManager {
   }
 
   _createFetchWithTimeout() {
-    const originalFetch =
-      typeof fetch !== "undefined" ? fetch : require("node-fetch");
+    const originalFetch = typeof fetch !== "undefined" ? fetch : require("node-fetch");
 
     return async (url, options = {}) => {
       const { timeout = this.config.timeout, ...fetchOptions } = options;
@@ -379,9 +370,7 @@ export class RequestManager {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
           throw new Error(
-            errorData.error?.message ||
-              errorData.message ||
-              `HTTP ${response.status}`
+            errorData.error?.message || errorData.message || `HTTP ${response.status}`,
           );
         }
 
@@ -458,9 +447,7 @@ export class RequestManager {
   getMetrics() {
     return {
       ...this.metrics,
-      successRate:
-        (this.metrics.requests - this.metrics.failures) /
-          this.metrics.requests || 0,
+      successRate: (this.metrics.requests - this.metrics.failures) / this.metrics.requests || 0,
     };
   }
 
